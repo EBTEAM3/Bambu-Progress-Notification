@@ -1,0 +1,25 @@
+[Unit]
+Description=Bambu FCM Bridge - Sends print notifications to Android
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME/bambu-fcm-bridge
+ExecStart=/usr/bin/python3 /home/YOUR_USERNAME/bambu-fcm-bridge/bambu_fcm_bridge.py
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/YOUR_USERNAME/bambu-fcm-bridge
+
+[Install]
+WantedBy=multi-user.target

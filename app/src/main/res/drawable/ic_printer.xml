@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    3D Printer icon for Bamboo Now Bar notification.
+    24dp vector drawable suitable for notification small icon.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+
+    <!-- 3D Printer representation: box with extruder -->
+
+    <!-- Printer base/frame -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M19,8H5c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h1v3c0,0.55 0.45,1 1,1h10c0.55,0 1,-0.45 1,-1v-3h1c0.55,0 1,-0.45 1,-1V9C20,8.45 19.55,8 19,8zM16,18H8v-4h8V18zM18,14H6v-4h12V14z" />
+
+    <!-- Print head / extruder -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M18,3H6C5.45,3 5,3.45 5,4v2h14V4C19,3.45 18.55,3 18,3z" />
+
+    <!-- Printer indicator light -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M8,11m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0" />
+
+    <!-- Print bed detail -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M10,15h4v2h-4z" />
+
+</vector>

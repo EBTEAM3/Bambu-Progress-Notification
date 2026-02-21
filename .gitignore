@@ -1,0 +1,29 @@
+# Android
+*.iml
+.gradle/
+/local.properties
+local.properties
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+
+# IDE
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Credentials & secrets - NEVER commit these
+app/google-services.json
+server/config.py
+server/firebase-service-account.json
+server/*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
