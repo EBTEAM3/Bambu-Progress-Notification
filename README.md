@@ -204,11 +204,38 @@ journalctl -u bambu-fcm-bridge -f
 
 ### Part 4: Android App Setup
 
+#### Android Studio Requirements
+
+This project targets **Android 16 (API 36)** which is currently in preview. You'll need a recent preview/canary version of Android Studio.
+
+| Component | Version |
+|-----------|---------|
+| Android Studio | **Narwhal** or newer (canary/preview channel) |
+| Android Gradle Plugin (AGP) | 9.0.0 |
+| Gradle | 9.1.0 |
+| Kotlin | 2.2.10 |
+| JDK | 17 |
+| compileSdk / targetSdk | 36 (Android 16) |
+| minSdk | 34 (Android 14) |
+
+#### Required SDK Components
+
+In Android Studio, open **SDK Manager** (Settings > Android SDK) and install:
+
+1. **SDK Platforms** tab:
+   - Android 16 (API 36) - including "Android SDK Platform 36"
+
+2. **SDK Tools** tab:
+   - Android SDK Build-Tools (latest)
+   - Android SDK Platform-Tools
+
 #### Build the App
 
 1. Open the project in **Android Studio**
 2. Make sure `app/google-services.json` is in place (from Part 2, Step 2)
-3. Build and install the app on your Samsung Galaxy phone
+3. Wait for Gradle sync to complete (may take a few minutes on first open)
+4. If prompted to update AGP or Gradle, keep the versions as-is - the project is configured for specific versions
+5. Build and install the app on your phone
 
 #### Enable Now Bar
 
