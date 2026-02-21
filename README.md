@@ -51,34 +51,31 @@ It looks like: `01S00C123456789` or `01P00A123456789`
 
 #### 2. User ID and Access Token
 
-These come from your Bambu Lab account. The easiest way to get them:
+These come from your Bambu Lab account. A helper script is included that handles the login and 2FA for you.
 
-**Method A - Bambu Studio (Recommended)**
+**Method A - Credential Helper Script (Recommended)**
 
-1. Open **Bambu Studio** on your computer
-2. Make sure you're logged in to your Bambu account
-3. Navigate to the Bambu Studio config directory:
+```bash
+cd server
+pip3 install requests
+python3 get_credentials.py
+```
+
+The script will:
+1. Prompt for your Bambu Lab email and password
+2. Handle 2FA verification (sends a code to your email)
+3. Output your **User ID** and **Access Token** ready to paste into `config.py`
+
+**Method B - Bambu Studio Config Files**
+
+1. Open **Bambu Studio** on your computer and make sure you're logged in
+2. Navigate to the config directory:
    - **Windows**: `%APPDATA%\BambuStudio\`
    - **macOS**: `~/Library/Application Support/BambuStudio/`
    - **Linux**: `~/.config/BambuStudio/`
-4. Look inside the most recently modified folder - find a file that contains your login info. You can search for files containing your email address
-5. Your **User ID** is the numeric ID associated with your account (e.g., `948732455`)
-6. Your **Access Token** starts with `AAD` and is a long string
-
-**Method B - Network Inspection**
-
-1. Open your browser's Developer Tools (F12)
-2. Go to the Network tab
-3. Log in to [Bambu Lab Cloud](https://bambulab.com/)
-4. Look for API responses containing `token` and `user_id` fields
-5. The access token is in the `Authorization` header or response body
-
-**Method C - Bambu Handy App (Android)**
-
-1. Use a packet capture app (like HttpCanary or PCAPdroid)
-2. Open the Bambu Handy app
-3. Look for requests to `*.bambulab.com` APIs
-4. The `Authorization` header contains your access token
+3. Look inside the most recently modified folder - search for files containing your email address
+4. Your **User ID** is the numeric ID associated with your account
+5. Your **Access Token** starts with `AAD` and is a long string
 
 #### MQTT Server Region
 
@@ -279,6 +276,7 @@ BambuNowBar/
 │       └── ...
 ├── server/                       # Linux server
 │   ├── bambu_fcm_bridge.py       # Main server script
+│   ├── get_credentials.py        # Helper to retrieve Bambu User ID & Access Token
 │   ├── config.example.py         # Configuration template
 │   ├── config.py                 # Your config (NOT in repo - you create this)
 │   ├── firebase-service-account.json  # Firebase credentials (NOT in repo)
