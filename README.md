@@ -4,6 +4,13 @@ Real-time 3D print progress on your Samsung Galaxy lock screen via the **Now Bar
 
 A lightweight Linux server monitors your Bambu Lab printer over MQTT and pushes live progress updates to your phone via Firebase Cloud Messaging. Your phone displays print progress as a **Live Notification** in the Samsung Now Bar - visible on the lock screen, status bar, and notification panel - with zero battery drain on the phone.
 
+![Screenshot_20260222_221152_One UI Home](https://github.com/user-attachments/assets/714ecb8c-84b0-43eb-b0e8-9c4ec00fe628)
+![Screenshot_20260222_221151_One UI Home](https://github.com/user-attachments/assets/b98b7370-30fe-4da4-b973-d197064cadb5)
+![Screenshot_20260222_221146_One UI Home](https://github.com/user-attachments/assets/cb9ef2a8-3f96-46de-b592-081409a4c2a5)
+![Screenshot_20260222_221143_One UI Home](https://github.com/user-attachments/assets/696f20ce-59ab-47be-8266-dae7b04bb752)
+![Screenshot_20260222_221127_One UI Home](https://github.com/user-attachments/assets/3e581f82-1d4a-4806-a0fd-cf53bccc10e7)
+
+
 ## How It Works
 
 ```
@@ -326,3 +333,4 @@ BambuNowBar/
 ## License
 
 MIT
+
