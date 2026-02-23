@@ -1,8 +1,8 @@
 # BambuNowBar
 
-Real-time 3D print progress on your Samsung Galaxy lock screen via the **Now Bar** (One UI 8 / Android 16 Live Notifications).
+Real-time 3D print progress on your **Samsung Galaxy lock screen** (Now Bar) and **iPhone lock screen & Dynamic Island** (Live Activities).
 
-A lightweight Linux server monitors your Bambu Lab printer over MQTT and pushes live progress updates to your phone via Firebase Cloud Messaging. Your phone displays print progress as a **Live Notification** in the Samsung Now Bar - visible on the lock screen, status bar, and notification panel - with zero battery drain on the phone.
+A lightweight Linux server monitors your Bambu Lab printer over MQTT and pushes live progress updates to your phone. On **Android**, it uses Firebase Cloud Messaging to display progress in Samsung's Now Bar. On **iOS**, it uses Apple's ActivityKit push notifications to display Live Activities on the lock screen and Dynamic Island — with zero battery drain on the phone.
 
 <img src="https://github.com/user-attachments/assets/714ecb8c-84b0-43eb-b0e8-9c4ec00fe628" width="20%"> <img src="https://github.com/user-attachments/assets/b98b7370-30fe-4da4-b973-d197064cadb5" width="20%"> <img src="https://github.com/user-attachments/assets/3e581f82-1d4a-4806-a0fd-cf53bccc10e7" width="20%">
 <img src="https://github.com/user-attachments/assets/cb9ef2a8-3f96-46de-b592-081409a4c2a5" width="45%"> <img src="https://github.com/user-attachments/assets/696f20ce-59ab-47be-8266-dae7b04bb752" width="45%">
@@ -12,31 +12,36 @@ A lightweight Linux server monitors your Bambu Lab printer over MQTT and pushes 
 ## How It Works
 
 ```
-Bambu Printer ──MQTT──> Linux Server ──FCM Push──> Android App ──> Now Bar
-     (24/7)              (Python)        (wake only)           (lock screen)
+                                       ┌──FCM Push──> Android App ──> Now Bar (Samsung lock screen)
+Bambu Printer ──MQTT──> Linux Server ──┤
+     (24/7)              (Python)      └──APNs Push──> iOS App ──> Live Activity (Dynamic Island / lock screen)
 ```
 
 1. **Linux server** maintains a persistent MQTT connection to Bambu Cloud
-2. When the printer state changes (progress, layer, start, finish), the server sends a **Firebase Cloud Messaging** push notification
-3. The Android app receives the push, creates a **Live Notification** that appears in Samsung's Now Bar
-4. Your phone only wakes when a notification arrives - **near-zero battery impact**
+2. When the printer state changes (progress, layer, start, finish), the server sends push notifications
+3. **Android**: FCM push → Now Bar live notification on Samsung lock screen
+4. **iOS**: APNs push → Live Activity on lock screen & Dynamic Island
+5. Your phone only wakes when a notification arrives - **near-zero battery impact**
 
 ## Features
 
-- Live progress bar on the Samsung Now Bar (lock screen bottom)
-- Status bar chip showing current percentage
+- **Android**: Live progress bar in Samsung Now Bar, status bar chip, notification panel
+- **iOS**: Live Activity on lock screen, Dynamic Island (compact, expanded, minimal)
 - Progress, ETA, layer info, and job name
 - Start, complete, and cancel notifications
-- Multi-device support (send to multiple phones)
+- Multi-device support (send to multiple phones, mix of Android and iOS)
+- iOS tokens auto-sync via Firebase Firestore (no manual token copying for iOS)
 - Runs as a systemd service for 24/7 operation
 
 ## Requirements
 
-- **Phone**: Samsung Galaxy with One UI 8 (Android 16) for Now Bar support
+- **Android Phone**: Samsung Galaxy with One UI 8 (Android 16) for Now Bar support
   - Older Android versions get standard progress notifications instead
+- **iPhone**: Any iPhone with iOS 18+ (Dynamic Island requires iPhone 14 Pro or newer)
 - **Printer**: Any Bambu Lab printer connected to Bambu Cloud (X1C, P1S, P1P, A1, A1 Mini, etc.)
 - **Server**: Any always-on Linux machine (Raspberry Pi, home server, VPS, WSL, etc.)
 - **Accounts**: Bambu Lab account, Google/Firebase account (free tier)
+- **iOS only**: Apple Developer Program membership ($99/year) for push notifications
 
 ---
 
@@ -128,6 +133,74 @@ Firebase Cloud Messaging (FCM) is free and handles delivering push notifications
 
 ---
 
+### Part 2.5: Apple Developer Setup (iOS only)
+
+Skip this section if you only have an Android device.
+
+#### Step 1: Create an APNs Key
+
+1. Go to [developer.apple.com](https://developer.apple.com/) and sign in
+2. Navigate to **Certificates, Identifiers & Keys** > **Keys**
+3. Click the **+** button to create a new key
+4. Enter a name (e.g., `BambuNowBar APNs Key`)
+5. Check **Apple Push Notifications service (APNs)**
+6. Click **Continue**, then **Register**
+7. **Download the `.p8` file** — you can only download this once!
+8. Note the **Key ID** shown on the page (10-character string)
+
+> **Environment note**: When creating the key, select **Sandbox** environment. This matches the `aps-environment = development` entitlement used by debug builds in Xcode and the `APNS_USE_SANDBOX = True` server setting. Apple uses different names for the same thing: "Sandbox" (APNs/Developer Portal) = "development" (Xcode entitlements). When you later distribute via TestFlight or the App Store, switch to **Sandbox & Production** and set `APNS_USE_SANDBOX = False` on your server.
+
+#### Step 2: Note Your Team ID
+
+1. Go to [developer.apple.com/account](https://developer.apple.com/account)
+2. Under **Membership details**, find your **Team ID** (10-character string)
+
+#### Step 3: Place the Key File
+
+Copy the `.p8` file to your server's `server/` directory:
+```bash
+scp ~/Downloads/AuthKey_XXXXXXXXXX.p8 your-server:~/BambuNowBar/server/
+```
+
+#### Step 4: Enable Firestore
+
+Firestore is used to automatically sync iOS push tokens between the iOS app and your server.
+
+1. In [Firebase Console](https://console.firebase.google.com/), select your project
+2. In the left sidebar, click **Build** > **Firestore Database**
+3. Click **Create database**
+4. Choose **Start in production mode**, click **Next**
+5. Select a location close to your server, click **Enable**
+6. Go to the **Rules** tab and replace the rules with:
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /bambu_tokens/{deviceId} {
+         allow read, write: if true;
+       }
+     }
+   }
+   ```
+7. Click **Publish**
+
+> **Note**: These open rules are suitable for personal use. For a more secure setup, use Firebase Authentication and restrict writes to authenticated users.
+
+#### Step 5: Add iOS App to Firebase
+
+1. In Firebase Console, click **Add app** > **iOS**
+2. Enter the iOS bundle ID: `com.elliot.bamboonowbar`
+3. App nickname: `Bambu Now Bar iOS`
+4. Click **Register app**
+5. **Download `GoogleService-Info.plist`**
+6. Place this file in your iOS project at:
+   ```
+   ios/BambuNowBar/GoogleService-Info.plist
+   ```
+7. Click **Next** through the remaining steps (SDK is already configured in the project)
+
+---
+
 ### Part 3: Server Setup
 
 #### Install Dependencies
@@ -157,8 +230,14 @@ BAMBU_USER_ID = "YOUR_NUMERIC_USER_ID"
 BAMBU_ACCESS_TOKEN = "YOUR_AAD_TOKEN_HERE"
 BAMBU_PRINTER_SERIAL = "YOUR_PRINTER_SERIAL"
 FCM_DEVICE_TOKENS = [
-    "paste_token_from_app_here",
+    "paste_token_from_android_app_here",
 ]
+
+# iOS only (leave empty if you don't have an iOS device):
+APNS_KEY_FILE = "AuthKey_XXXXXXXXXX.p8"
+APNS_TEAM_ID = "YOUR_TEAM_ID"
+APNS_KEY_ID = "YOUR_KEY_ID"
+# APNS_USE_SANDBOX = True  # True for Xcode debug builds, False for TestFlight/App Store
 ```
 
 #### Place Firebase Credentials
@@ -257,19 +336,73 @@ In Android Studio, open **SDK Manager** (Settings > Android SDK) and install:
 
 ---
 
+### Part 5: iOS App Setup
+
+Skip this section if you only have an Android device.
+
+#### Prerequisites
+
+| Component | Version |
+|-----------|---------|
+| Xcode | **16.0** or newer |
+| iOS SDK | 18.0+ |
+| XcodeGen | Latest (`brew install xcodegen`) |
+| Apple Developer Account | Paid membership ($99/year) |
+
+#### Build the App
+
+```bash
+# Install XcodeGen if you haven't already
+brew install xcodegen
+
+# Generate the Xcode project
+cd ios
+xcodegen
+
+# Open in Xcode
+open BambuNowBar.xcodeproj
+```
+
+1. In Xcode, select the **BambuNowBar** target
+2. Under **Signing & Capabilities**, select your **Team** (Apple Developer account)
+3. Do the same for the **BambuNowBarWidgets** target
+4. Make sure `GoogleService-Info.plist` is in `ios/BambuNowBar/` (from Part 2.5, Step 5)
+5. Build and run on a **physical iPhone** (Live Activities require a real device)
+
+#### Verify Token Sync
+
+1. Open the app on your iPhone
+2. The app should show **Live Activities: Enabled**
+3. The push-to-start token should appear and sync to Firestore automatically
+4. Verify in [Firebase Console](https://console.firebase.google.com/) > **Firestore Database** > `bambu_tokens` collection
+
+#### How It Works
+
+Unlike Android where you manually copy the FCM token, iOS tokens are synced automatically:
+
+1. The iOS app registers for push-to-start tokens with Apple
+2. Tokens are written to Firebase Firestore automatically
+3. Your server reads tokens from Firestore in real-time
+4. When a print starts, the server sends an APNs push that starts the Live Activity
+5. Progress updates are sent via APNs directly to the Live Activity
+6. When the print ends, the Live Activity is dismissed
+
+---
+
 ## Verifying Everything Works
 
 1. Start the server (`python3 bambu_fcm_bridge.py` or via systemd)
-2. You should receive a **"Server Connected"** notification on your phone
-3. The app should show **"Server Active"** under the Copy FCM Token button
+2. **Android**: You should receive a **"Server Connected"** notification
+3. **iOS**: Check the app shows "Firestore Sync: Synced" and a push-to-start token
 4. Start a print on your Bambu printer
-5. Watch the Now Bar light up with live progress!
+5. **Android**: Watch the Now Bar light up with live progress!
+6. **iOS**: A Live Activity should appear on the lock screen and Dynamic Island
 
 ---
 
 ## Multiple Devices
 
-Add more FCM tokens to `config.py` to send notifications to multiple phones:
+**Android**: Add more FCM tokens to `config.py`:
 
 ```python
 FCM_DEVICE_TOKENS = [
@@ -278,6 +411,8 @@ FCM_DEVICE_TOKENS = [
     "token_for_tablet",
 ]
 ```
+
+**iOS**: Multiple iPhones are supported automatically. Each iPhone that opens the app registers its push token in Firestore, and the server sends updates to all registered iOS devices.
 
 ---
 
@@ -288,9 +423,12 @@ FCM_DEVICE_TOKENS = [
 | "config.py not found!" | Copy `config.example.py` to `config.py` and fill in your values |
 | "Failed to initialize Firebase" | Make sure `firebase-service-account.json` exists in the server directory |
 | "Bambu MQTT connection failed" | Check your Bambu credentials. Make sure port 8883 is not blocked by your firewall |
-| "FCM token not configured" | Copy the FCM token from the app and paste it into `config.py` |
-| No notifications received | 1. Check FCM token is correct 2. Ensure `google-services.json` is in the app 3. Check Firebase Console for errors |
+| "FCM token not configured" | Copy the FCM token from the Android app and paste it into `config.py` |
+| No Android notifications | 1. Check FCM token is correct 2. Ensure `google-services.json` is in the app 3. Check Firebase Console for errors |
 | Now Bar not showing | Enable "Live notifications for all apps" in Developer Options |
+| No iOS Live Activity | 1. Check APNs config in `config.py` 2. Ensure `.p8` key file is in `server/` 3. Check Firestore for tokens 4. Verify Live Activities enabled in iOS Settings |
+| iOS token not syncing | 1. Check `GoogleService-Info.plist` is in the iOS project 2. Verify Firestore is enabled in Firebase Console 3. Check Firestore security rules |
+| "APNs error 403" | Your `.p8` key may be invalid or revoked. Generate a new one in Apple Developer portal |
 | Server disconnects frequently | This is normal - the MQTT client auto-reconnects. Check your network stability |
 
 ---
@@ -299,21 +437,34 @@ FCM_DEVICE_TOKENS = [
 
 ```
 BambuNowBar/
-├── app/                          # Android app
-│   ├── google-services.json      # Firebase config (NOT in repo - you create this)
+├── app/                              # Android app
+│   ├── google-services.json          # Firebase config (NOT in repo)
 │   └── src/main/java/.../
-│       ├── MainActivity.kt       # Main UI
-│       ├── BambuFCMService.kt    # Receives FCM push notifications
-│       ├── LiveUpdateManager.kt  # Creates Now Bar live notifications
+│       ├── MainActivity.kt           # Main UI
+│       ├── BambuFCMService.kt        # Receives FCM push notifications
+│       ├── LiveUpdateManager.kt      # Creates Now Bar live notifications
 │       └── ...
-├── server/                       # Linux server
-│   ├── bambu_fcm_bridge.py       # Main server script
-│   ├── get_credentials.py        # Helper to retrieve Bambu User ID & Access Token
-│   ├── config.example.py         # Configuration template
-│   ├── config.py                 # Your config (NOT in repo - you create this)
-│   ├── firebase-service-account.json  # Firebase credentials (NOT in repo)
-│   ├── bambu-fcm-bridge.service  # systemd service file
-│   └── requirements.txt          # Python dependencies
+├── ios/                              # iOS app
+│   ├── project.yml                   # XcodeGen project spec
+│   ├── BambuNowBar/                  # Main app target
+│   │   ├── BambuNowBarApp.swift      # App entry point
+│   │   ├── ContentView.swift         # Status UI
+│   │   ├── TokenManager.swift        # Firestore token sync
+│   │   └── GoogleService-Info.plist  # Firebase config (NOT in repo)
+│   ├── Shared/
+│   │   └── PrinterAttributes.swift   # Live Activity data model
+│   └── BambuNowBarWidgets/           # Widget extension (Live Activity)
+│       ├── PrinterActivityLiveActivity.swift  # All Live Activity views
+│       └── BambuNowBarWidgetsBundle.swift
+├── server/                           # Linux server
+│   ├── bambu_fcm_bridge.py           # Main server script (FCM + APNs)
+│   ├── get_credentials.py            # Bambu credential helper
+│   ├── config.example.py             # Configuration template
+│   ├── config.py                     # Your config (NOT in repo)
+│   ├── firebase-service-account.json # Firebase credentials (NOT in repo)
+│   ├── AuthKey_*.p8                  # APNs key (NOT in repo)
+│   ├── bambu-fcm-bridge.service      # systemd service file
+│   └── requirements.txt              # Python dependencies
 └── README.md
 ```
 
@@ -321,10 +472,11 @@ BambuNowBar/
 
 ## Security Notes
 
-- `config.py`, `google-services.json`, and `firebase-service-account.json` are all `.gitignore`'d and will never be committed
+- `config.py`, `google-services.json`, `GoogleService-Info.plist`, `firebase-service-account.json`, and APNs `.p8` keys are all `.gitignore`'d and will never be committed
 - Never share your Bambu access token - it grants full access to your printer
-- The Firebase service account key should be kept private
+- The Firebase service account key and APNs `.p8` key should be kept private
 - FCM tokens are device-specific and rotate periodically
+- iOS push tokens are synced via Firestore with open rules for simplicity — suitable for personal use
 
 ---
 

@@ -1,3 +1,8 @@
 paho-mqtt>=2.0.0
 firebase-admin>=6.0.0
 requests>=2.28.0
+
+# iOS Live Activity support (optional — only needed if you have an iOS device)
+httpx[http2]>=0.27.0
+PyJWT>=2.8.0
+cryptography>=41.0.0

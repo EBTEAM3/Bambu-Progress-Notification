@@ -15,10 +15,19 @@ local.properties
 *.swp
 *.swo
 
+# iOS
+ios/BambuNowBar.xcodeproj/
+ios/BambuNowBar.xcworkspace/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
+ios/**/DerivedData/
+
 # Credentials & secrets - NEVER commit these
 app/google-services.json
+ios/BambuNowBar/GoogleService-Info.plist
 server/config.py
 server/firebase-service-account.json
+server/AuthKey_*.p8
 server/*.log
 
 # Python
