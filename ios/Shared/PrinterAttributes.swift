@@ -1,5 +1,6 @@
 import ActivityKit
 import Foundation
+import SwiftUI
 
 /// Defines the data model for the 3D printer Live Activity.
 /// Shared between the main app target and the widget extension target.
@@ -16,6 +17,10 @@ struct PrinterAttributes: ActivityAttributes {
         var layerNum: Int           // current layer number
         var totalLayers: Int        // total layer count
         var state: String           // "starting", "printing", "completed", "cancelled", "idle"
+        var nozzleTemp: Int?        // current nozzle temperature (°C)
+        var bedTemp: Int?           // current bed temperature (°C)
+        var nozzleTargetTemp: Int?  // target nozzle temperature (°C)
+        var bedTargetTemp: Int?     // target bed temperature (°C)
     }
 }
 
@@ -47,6 +52,21 @@ extension PrinterAttributes.ContentState {
         jobName.isEmpty ? "3D Print" : jobName
     }
 
+    var temperatureInfo: String? {
+        guard let nozzle = nozzleTemp, let bed = bedTemp else { return nil }
+        let nozzleStr = if let target = nozzleTargetTemp, target > 0 {
+            "\(nozzle)/\(target)°C"
+        } else {
+            "\(nozzle)°C"
+        }
+        let bedStr = if let target = bedTargetTemp, target > 0 {
+            "\(bed)/\(target)°C"
+        } else {
+            "\(bed)°C"
+        }
+        return "Nozzle \(nozzleStr) · Bed \(bedStr)"
+    }
+
     var stateLabel: String {
         switch state {
         case "starting": return "Starting"
@@ -55,6 +75,36 @@ extension PrinterAttributes.ContentState {
         case "cancelled": return "Cancelled"
         case "idle": return "Idle"
         default: return state.capitalized
+        }
+    }
+}
+
+// MARK: - UI Helpers
+
+extension PrinterAttributes.ContentState {
+    var iconName: String {
+        switch state {
+        case "completed": "checkmark.circle.fill"
+        case "cancelled": "xmark.circle.fill"
+        default: "printer.fill"
+        }
+    }
+
+    var accentColor: Color {
+        switch state {
+        case "completed": .green
+        case "cancelled": .red
+        case "starting": .orange
+        default: .blue
+        }
+    }
+
+    var trailingText: String {
+        switch state {
+        case "completed": "Done"
+        case "cancelled": "Stop"
+        case "starting": "..."
+        default: "\(progress)%"
         }
     }
 }
@@ -77,7 +127,11 @@ extension PrinterAttributes.ContentState {
         jobName: "Phone Stand",
         layerNum: 0,
         totalLayers: 500,
-        state: "starting"
+        state: "starting",
+        nozzleTemp: 150,
+        bedTemp: 45,
+        nozzleTargetTemp: 220,
+        bedTargetTemp: 60
     )
 
     static let mockCompleted = PrinterAttributes.ContentState(

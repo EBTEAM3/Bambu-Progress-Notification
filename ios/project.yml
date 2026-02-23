@@ -34,6 +34,8 @@ targets:
         product: FirebaseFirestore
     entitlements:
       path: BambuNowBar/BambuNowBar.entitlements
+      properties:
+        aps-environment: development
 
   BambuNowBarWidgets:
     type: app-extension

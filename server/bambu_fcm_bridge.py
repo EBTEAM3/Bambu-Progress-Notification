@@ -224,7 +224,9 @@ class PrinterState:
         self.layer_num: int = 0
         self.total_layers: int = 0
         self.nozzle_temp: int = 0
+        self.nozzle_target_temp: int = 0
         self.bed_temp: int = 0
+        self.bed_target_temp: int = 0
         # For tracking changes
         self.last_sent_state: str = "UNKNOWN"
         self.last_sent_progress: int = -1
@@ -293,6 +295,10 @@ class BambuFCMBridge:
             "layerNum": self.state.layer_num,
             "totalLayers": self.state.total_layers,
             "state": state_str,
+            "nozzleTemp": self.state.nozzle_temp,
+            "bedTemp": self.state.bed_temp,
+            "nozzleTargetTemp": self.state.nozzle_target_temp,
+            "bedTargetTemp": self.state.bed_target_temp,
         }
 
     def _send_apns_start(self):
@@ -450,6 +456,10 @@ class BambuFCMBridge:
             "job_name": self.state.job_name,
             "layer_num": str(self.state.layer_num),
             "total_layers": str(self.state.total_layers),
+            "nozzle_temp": str(self.state.nozzle_temp),
+            "nozzle_target_temp": str(self.state.nozzle_target_temp),
+            "bed_temp": str(self.state.bed_temp),
+            "bed_target_temp": str(self.state.bed_target_temp),
             "timestamp": str(int(now)),
         }
 
@@ -582,8 +592,16 @@ class BambuFCMBridge:
                     self.state.nozzle_temp = print_data["nozzle_temper"]
                     updated = True
 
+                if "nozzle_target_temper" in print_data:
+                    self.state.nozzle_target_temp = print_data["nozzle_target_temper"]
+                    updated = True
+
                 if "bed_temper" in print_data:
                     self.state.bed_temp = print_data["bed_temper"]
+                    updated = True
+
+                if "bed_target_temper" in print_data:
+                    self.state.bed_target_temp = print_data["bed_target_temper"]
                     updated = True
 
                 if "subtask_name" in print_data:
@@ -737,7 +755,9 @@ class BambuFCMBridge:
         self.state.remaining_time_minutes = 45
         self.state.job_name = job_name
         self.state.nozzle_temp = 25
+        self.state.nozzle_target_temp = target_nozzle
         self.state.bed_temp = 25
+        self.state.bed_target_temp = target_bed
 
         # Send the starting notification (starts iOS Live Activity)
         self._print_status_update()
@@ -746,13 +766,14 @@ class BambuFCMBridge:
         self.state.last_sent_progress = self.state.progress
         self.state.last_sent_layer = self.state.layer_num
 
-        # Simulate heating ramp (console output only — phone shows "Preparing printer...")
+        # Simulate heating ramp — send updates so phone shows temp progress
         heat_steps = 6
         for i in range(1, heat_steps + 1):
             time.sleep(1)
             self.state.nozzle_temp = min(target_nozzle, 25 + i * (target_nozzle - 25) // heat_steps)
             self.state.bed_temp = min(target_bed, 25 + i * (target_bed - 25) // heat_steps)
             self._print_status_update()
+            self.send_print_update()
 
         # Phase 2: RUNNING — progress 0→100% (~20 seconds, 20 steps)
         logger.info("Phase 2/3: RUNNING (printing)")
