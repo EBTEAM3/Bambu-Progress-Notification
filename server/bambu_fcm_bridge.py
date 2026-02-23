@@ -238,6 +238,7 @@ class BambuFCMBridge:
         self.apns: Optional[APNsSender] = None
         self.token_listener = FirestoreTokenListener()
         self._apns_activity_active = False
+        self._apns_ending = False
         self._init_firebase()
         self._init_apns()
         self.token_listener.start()
@@ -363,6 +364,12 @@ class BambuFCMBridge:
         for token in tokens:
             self.apns.send(token, payload)
 
+    def _end_apns_activity(self, dismissal_seconds: int = 300):
+        """End the Live Activity after showing the final state in the Dynamic Island."""
+        self._send_apns_end(dismissal_seconds=dismissal_seconds)
+        self._apns_activity_active = False
+        self._apns_ending = False
+
     def send_fcm_notification(self, title: str, body: str, data: Dict[str, str]):
         """Send FCM data-only message to all registered devices.
 
@@ -475,11 +482,16 @@ class BambuFCMBridge:
                     else:
                         logger.warning("APNs: no activity push tokens yet — waiting for iOS app to provide one")
             elif notification_type in ("completed", "cancelled"):
-                if self._apns_activity_active:
-                    self._send_apns_end(dismissal_seconds=300)
-                    self._apns_activity_active = False
+                if self._apns_activity_active and not self._apns_ending:
+                    # Send update so Dynamic Island shows completed/cancelled state
+                    self._send_apns_update()
+                    # End after a delay so the final state is visible in the Dynamic Island
+                    self._apns_ending = True
+                    delay = 5.0
+                    threading.Timer(delay, self._end_apns_activity, args=[300]).start()
+                    logger.info(f"APNs: will end Live Activity in {delay:.0f}s")
             elif notification_type == "idle":
-                if self._apns_activity_active:
+                if self._apns_activity_active and not self._apns_ending:
                     self._send_apns_end(dismissal_seconds=0)
                     self._apns_activity_active = False
         elif not self.apns:
@@ -678,6 +690,101 @@ class BambuFCMBridge:
         client.publish(topic, payload)
         logger.info("Requested full state from printer")
 
+    def run_test_mode(self):
+        """Simulate a full print cycle (start → progress → complete) in ~30 seconds.
+
+        Sends real FCM and APNs notifications without needing an actual print.
+        Useful for verifying that notifications arrive correctly on all devices.
+        """
+        logger.info("=" * 50)
+        logger.info("TEST MODE: Simulating a 30-second print cycle...")
+        logger.info("=" * 50)
+
+        # Wait for Firestore tokens to load (they arrive asynchronously)
+        if self.apns and self.apns.enabled:
+            logger.info("Waiting for Firestore token sync...")
+            for _ in range(10):
+                if self.token_listener.has_tokens():
+                    break
+                time.sleep(1)
+
+            pts = len(self.token_listener.push_to_start_tokens)
+            apt = len(self.token_listener.activity_push_tokens)
+            if pts > 0 or apt > 0:
+                logger.info(f"Firestore tokens loaded: {pts} push-to-start, {apt} activity")
+            else:
+                logger.warning("No iOS tokens found in Firestore — iOS notifications will be skipped")
+
+        fcm_count = len([t for t in FCM_DEVICE_TOKENS if t != "YOUR_FCM_TOKEN_HERE"])
+        logger.info(f"Targets: {fcm_count} FCM device(s)")
+
+        job_name = "Test Print"
+        total_layers = 200
+        target_nozzle = 220
+        target_bed = 60
+
+        # Reset tracking state
+        self.state.last_sent_state = "UNKNOWN"
+        self.state.last_sent_progress = -1
+        self.state.last_sent_layer = -1
+
+        # Phase 1: PREPARE — heating nozzle & bed (~7 seconds)
+        logger.info("Phase 1/3: PREPARE (heating & calibrating)")
+        self.state.gcode_state = "PREPARE"
+        self.state.progress = 0
+        self.state.layer_num = 0
+        self.state.total_layers = total_layers
+        self.state.remaining_time_minutes = 45
+        self.state.job_name = job_name
+        self.state.nozzle_temp = 25
+        self.state.bed_temp = 25
+
+        # Send the starting notification (starts iOS Live Activity)
+        self._print_status_update()
+        self.send_print_update()
+        self.state.last_sent_state = self.state.gcode_state
+        self.state.last_sent_progress = self.state.progress
+        self.state.last_sent_layer = self.state.layer_num
+
+        # Simulate heating ramp (console output only — phone shows "Preparing printer...")
+        heat_steps = 6
+        for i in range(1, heat_steps + 1):
+            time.sleep(1)
+            self.state.nozzle_temp = min(target_nozzle, 25 + i * (target_nozzle - 25) // heat_steps)
+            self.state.bed_temp = min(target_bed, 25 + i * (target_bed - 25) // heat_steps)
+            self._print_status_update()
+
+        # Phase 2: RUNNING — progress 0→100% (~20 seconds, 20 steps)
+        logger.info("Phase 2/3: RUNNING (printing)")
+        self.state.gcode_state = "RUNNING"
+        steps = 20
+        for i in range(1, steps + 1):
+            self.state.progress = min(int(i * 100 / steps), 100)
+            self.state.layer_num = int(self.state.progress * total_layers / 100)
+            self.state.remaining_time_minutes = max(0, int(45 * (1 - self.state.progress / 100)))
+
+            self._print_status_update()
+            self.send_print_update()
+            self.state.last_sent_state = self.state.gcode_state
+            self.state.last_sent_progress = self.state.progress
+            self.state.last_sent_layer = self.state.layer_num
+            time.sleep(1)
+
+        # Phase 3: FINISH — print complete (~3 seconds)
+        logger.info("Phase 3/3: FINISH (completed)")
+        self.state.gcode_state = "FINISH"
+        self.state.progress = 100
+        self.state.layer_num = total_layers
+        self.state.remaining_time_minutes = 0
+        self._print_status_update()
+        self.send_print_update()
+        # Wait for the delayed APNs end event (5s timer) to fire
+        time.sleep(7)
+
+        logger.info("=" * 50)
+        logger.info("TEST MODE: Complete! Check your devices for notifications.")
+        logger.info("=" * 50)
+
     def run(self):
         """Main run loop"""
         logger.info("=" * 50)
@@ -725,4 +832,7 @@ class BambuFCMBridge:
 
 if __name__ == "__main__":
     bridge = BambuFCMBridge()
-    bridge.run()
+    if "--test" in sys.argv:
+        bridge.run_test_mode()
+    else:
+        bridge.run()

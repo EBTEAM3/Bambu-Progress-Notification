@@ -398,6 +398,17 @@ Unlike Android where you manually copy the FCM token, iOS tokens are synced auto
 5. **Android**: Watch the Now Bar light up with live progress!
 6. **iOS**: A Live Activity should appear on the lock screen and Dynamic Island
 
+#### Test Mode
+
+To verify notifications work without a real print, run:
+
+```bash
+cd server
+python3 bambu_fcm_bridge.py --test
+```
+
+This simulates a full print cycle (start → progress → complete) in about 30 seconds, sending real notifications to all configured devices. No MQTT connection to the printer is needed.
+
 ---
 
 ## Multiple Devices
