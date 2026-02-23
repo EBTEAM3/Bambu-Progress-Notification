@@ -129,8 +129,12 @@ class APNsSender:
         self._token_time = now
         return self._token
 
-    def send(self, device_token: str, payload_dict: dict) -> bool:
-        """Send an APNs Live Activity notification."""
+    def send(self, device_token: str, payload_dict: dict, priority: int = 10) -> bool:
+        """Send an APNs Live Activity notification.
+
+        Args:
+            priority: 10 = high (counts toward budget), 5 = low (doesn't count).
+        """
         if not self._enabled:
             return False
         try:
@@ -140,12 +144,12 @@ class APNsSender:
                 "authorization": f"bearer {auth}",
                 "apns-push-type": "liveactivity",
                 "apns-topic": topic,
-                "apns-priority": "10",
+                "apns-priority": str(priority),
             }
             url = f"{self._base_url}/3/device/{device_token}"
             response = self._client.post(url, json=payload_dict, headers=headers)
             if response.status_code == 200:
-                logger.info(f"APNs sent to ...{device_token[-8:]}")
+                logger.info(f"APNs sent (p={priority}) to ...{device_token[-8:]}")
                 return True
             else:
                 logger.error(f"APNs error {response.status_code}: {response.text}")
@@ -227,6 +231,7 @@ class PrinterState:
         self.nozzle_target_temp: int = 0
         self.bed_temp: int = 0
         self.bed_target_temp: int = 0
+        self.chamber_temp: int = 0
         # For tracking changes
         self.last_sent_state: str = "UNKNOWN"
         self.last_sent_progress: int = -1
@@ -299,10 +304,11 @@ class BambuFCMBridge:
             "bedTemp": self.state.bed_temp,
             "nozzleTargetTemp": self.state.nozzle_target_temp,
             "bedTargetTemp": self.state.bed_target_temp,
+            "chamberTemp": self.state.chamber_temp,
         }
 
     def _send_apns_start(self):
-        """Start a Live Activity on iOS via APNs push-to-start."""
+        """Start a Live Activity on iOS via APNs push-to-start. Priority 10."""
         if not self.apns or not self.apns.enabled:
             return
         tokens = self.token_listener.push_to_start_tokens
@@ -327,10 +333,14 @@ class BambuFCMBridge:
             }
         }
         for token in tokens:
-            self.apns.send(token, payload)
+            self.apns.send(token, payload, priority=10)
 
-    def _send_apns_update(self):
-        """Update the Live Activity on iOS via APNs."""
+    def _send_apns_update(self, priority: int = 5):
+        """Update the Live Activity on iOS via APNs.
+
+        Args:
+            priority: 10 for state changes, 5 for routine progress (default).
+        """
         if not self.apns or not self.apns.enabled:
             return
         tokens = self.token_listener.activity_push_tokens
@@ -347,10 +357,10 @@ class BambuFCMBridge:
             }
         }
         for token in tokens:
-            self.apns.send(token, payload)
+            self.apns.send(token, payload, priority=priority)
 
-    def _send_apns_end(self, dismissal_seconds: int = 300):
-        """End the Live Activity on iOS via APNs."""
+    def _send_apns_end(self, dismissal_seconds: int = 14400):
+        """End the Live Activity on iOS via APNs. Priority 10."""
         if not self.apns or not self.apns.enabled:
             return
         tokens = self.token_listener.activity_push_tokens
@@ -368,9 +378,9 @@ class BambuFCMBridge:
             }
         }
         for token in tokens:
-            self.apns.send(token, payload)
+            self.apns.send(token, payload, priority=10)
 
-    def _end_apns_activity(self, dismissal_seconds: int = 300):
+    def _end_apns_activity(self, dismissal_seconds: int = 14400):
         """End the Live Activity after showing the final state in the Dynamic Island."""
         self._send_apns_end(dismissal_seconds=dismissal_seconds)
         self._apns_activity_active = False
@@ -460,6 +470,7 @@ class BambuFCMBridge:
             "nozzle_target_temp": str(self.state.nozzle_target_temp),
             "bed_temp": str(self.state.bed_temp),
             "bed_target_temp": str(self.state.bed_target_temp),
+            "chamber_temp": str(self.state.chamber_temp),
             "timestamp": str(int(now)),
         }
 
@@ -472,33 +483,39 @@ class BambuFCMBridge:
             apt_count = len(self.token_listener.activity_push_tokens)
 
             if notification_type == "starting":
-                if pts_count > 0:
-                    logger.info(f"APNs: starting Live Activity ({pts_count} push-to-start token(s))")
-                    self._send_apns_start()
-                    self._apns_activity_active = True
+                if not self._apns_activity_active:
+                    if pts_count > 0:
+                        logger.info(f"APNs: starting Live Activity ({pts_count} push-to-start token(s))")
+                        self._send_apns_start()  # always priority 10
+                        self._apns_activity_active = True
+                    else:
+                        logger.warning("APNs: no push-to-start tokens in Firestore — cannot start Live Activity")
                 else:
-                    logger.warning("APNs: no push-to-start tokens in Firestore — cannot start Live Activity")
+                    if apt_count > 0:
+                        self._send_apns_update(priority=5)  # routine heating update
+                    else:
+                        logger.debug("APNs: waiting for activity push token during PREPARE")
             elif notification_type == "progress":
                 if not self._apns_activity_active:
                     if pts_count > 0:
                         logger.info(f"APNs: starting Live Activity (first progress, {pts_count} token(s))")
-                        self._send_apns_start()
+                        self._send_apns_start()  # always priority 10
                         self._apns_activity_active = True
                     else:
                         logger.warning("APNs: no push-to-start tokens — cannot start Live Activity")
                 else:
                     if apt_count > 0:
-                        self._send_apns_update()
+                        self._send_apns_update(priority=5)  # routine progress update
                     else:
                         logger.warning("APNs: no activity push tokens yet — waiting for iOS app to provide one")
             elif notification_type in ("completed", "cancelled"):
                 if self._apns_activity_active and not self._apns_ending:
                     # Send update so Dynamic Island shows completed/cancelled state
-                    self._send_apns_update()
+                    self._send_apns_update(priority=10)  # important state change
                     # End after a delay so the final state is visible in the Dynamic Island
                     self._apns_ending = True
                     delay = 5.0
-                    threading.Timer(delay, self._end_apns_activity, args=[300]).start()
+                    threading.Timer(delay, self._end_apns_activity, args=[14400]).start()
                     logger.info(f"APNs: will end Live Activity in {delay:.0f}s")
             elif notification_type == "idle":
                 if self._apns_activity_active and not self._apns_ending:
@@ -604,6 +621,15 @@ class BambuFCMBridge:
                     self.state.bed_target_temp = print_data["bed_target_temper"]
                     updated = True
 
+                # Chamber temp: newer firmware (P2S, H2, X1E) uses CTC path
+                ctc_temp = print_data.get("device", {}).get("ctc", {}).get("info", {}).get("temp", None)
+                if ctc_temp is not None:
+                    self.state.chamber_temp = ctc_temp & 0xFFFF
+                    updated = True
+                elif "chamber_temper" in print_data:
+                    self.state.chamber_temp = round(print_data["chamber_temper"])
+                    updated = True
+
                 if "subtask_name" in print_data:
                     self.state.job_name = print_data["subtask_name"]
                     updated = True
@@ -662,7 +688,8 @@ class BambuFCMBridge:
               f"Layer {self.state.layer_num}/{self.state.total_layers} | "
               f"ETA: {time_str} | "
               f"Nozzle: {self.state.nozzle_temp}°C | "
-              f"Bed: {self.state.bed_temp}°C")
+              f"Bed: {self.state.bed_temp}°C | "
+              f"Chamber: {self.state.chamber_temp}°C")
 
     def _has_meaningful_change(self) -> bool:
         """Check if state has changed enough to warrant sending FCM"""
@@ -709,13 +736,13 @@ class BambuFCMBridge:
         logger.info("Requested full state from printer")
 
     def run_test_mode(self):
-        """Simulate a full print cycle (start → progress → complete) in ~30 seconds.
+        """Simulate a full print cycle (start → progress → complete) in ~25 seconds.
 
         Sends real FCM and APNs notifications without needing an actual print.
         Useful for verifying that notifications arrive correctly on all devices.
         """
         logger.info("=" * 50)
-        logger.info("TEST MODE: Simulating a 30-second print cycle...")
+        logger.info("TEST MODE: Simulating a ~25-second print cycle...")
         logger.info("=" * 50)
 
         # Wait for Firestore tokens to load (they arrive asynchronously)
@@ -758,6 +785,7 @@ class BambuFCMBridge:
         self.state.nozzle_target_temp = target_nozzle
         self.state.bed_temp = 25
         self.state.bed_target_temp = target_bed
+        self.state.chamber_temp = 22
 
         # Send the starting notification (starts iOS Live Activity)
         self._print_status_update()
@@ -767,18 +795,19 @@ class BambuFCMBridge:
         self.state.last_sent_layer = self.state.layer_num
 
         # Simulate heating ramp — send updates so phone shows temp progress
-        heat_steps = 6
+        heat_steps = 3
         for i in range(1, heat_steps + 1):
-            time.sleep(1)
+            time.sleep(2)
             self.state.nozzle_temp = min(target_nozzle, 25 + i * (target_nozzle - 25) // heat_steps)
             self.state.bed_temp = min(target_bed, 25 + i * (target_bed - 25) // heat_steps)
+            self.state.chamber_temp = 22 + i * 16 // heat_steps  # ramps ~22→38°C
             self._print_status_update()
             self.send_print_update()
 
-        # Phase 2: RUNNING — progress 0→100% (~20 seconds, 20 steps)
+        # Phase 2: RUNNING — progress 0→100% in 20% steps (~10 seconds)
         logger.info("Phase 2/3: RUNNING (printing)")
         self.state.gcode_state = "RUNNING"
-        steps = 20
+        steps = 5
         for i in range(1, steps + 1):
             self.state.progress = min(int(i * 100 / steps), 100)
             self.state.layer_num = int(self.state.progress * total_layers / 100)
@@ -789,7 +818,7 @@ class BambuFCMBridge:
             self.state.last_sent_state = self.state.gcode_state
             self.state.last_sent_progress = self.state.progress
             self.state.last_sent_layer = self.state.layer_num
-            time.sleep(1)
+            time.sleep(2)
 
         # Phase 3: FINISH — print complete (~3 seconds)
         logger.info("Phase 3/3: FINISH (completed)")

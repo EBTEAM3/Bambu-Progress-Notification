@@ -9,34 +9,51 @@ struct PrinterActivityLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 6) {
-                        Image(systemName: context.state.iconName)
+                    HStack {
+                        Spacer()
+
+                        Text(context.state.stateLabel)
+                            .font(.caption)
+                            .fontWeight(.medium)
                             .foregroundColor(context.state.accentColor)
-                            .padding(.leading, 2)
-                            .padding(.top, 2)
-                        Text(context.state.displayTitle)
-                            .font(.headline)
-                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(context.state.accentColor.opacity(0.2))
+                            .clipShape(Capsule())
+
+                        Spacer()
                     }
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(context.state.trailingText)
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .monospacedDigit()
-                        .foregroundColor(context.state.accentColor)
-                        .padding(.trailing, 2)
+                    HStack {
+                        Spacer()
+
+                        Text(context.state.trailingText)
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .monospacedDigit()
+                            .foregroundColor(context.state.accentColor)
+
+                        Spacer()
+                    }
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
                     ExpandedBottomView(state: context.state)
-                        .padding(.horizontal, 2)
                 }
             } compactLeading: {
-                Image(systemName: context.state.iconName)
-                    .font(.body)
-                    .foregroundColor(context.state.accentColor)
+                if context.state.isCompleted || context.state.isCancelled {
+                    Image(systemName: context.state.iconName)
+                        .font(.body)
+                        .foregroundColor(context.state.accentColor)
+                } else {
+                    Text(context.state.compactLeadingTemp)
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .monospacedDigit()
+                        .foregroundColor(context.state.accentColor)
+                }
             } compactTrailing: {
                 Text(context.state.trailingText)
                     .font(.caption)
@@ -70,10 +87,16 @@ struct PrinterActivityLiveActivity: Widget {
     PrinterAttributes.ContentState.mockCompleted
 }
 
-#Preview("Dynamic Island Compact", as: .dynamicIsland(.compact), using: PrinterAttributes.preview) {
+#Preview("Dynamic Island Compact — Printing", as: .dynamicIsland(.compact), using: PrinterAttributes.preview) {
     PrinterActivityLiveActivity()
 } contentStates: {
     PrinterAttributes.ContentState.mockPrinting
+}
+
+#Preview("Dynamic Island Compact — Cancelled", as: .dynamicIsland(.compact), using: PrinterAttributes.preview) {
+    PrinterActivityLiveActivity()
+} contentStates: {
+    PrinterAttributes.ContentState.mockCancelled
 }
 
 #Preview("Dynamic Island Minimal", as: .dynamicIsland(.minimal), using: PrinterAttributes.preview) {
@@ -82,8 +105,14 @@ struct PrinterActivityLiveActivity: Widget {
     PrinterAttributes.ContentState.mockPrinting
 }
 
-#Preview("Dynamic Island Expanded", as: .dynamicIsland(.expanded), using: PrinterAttributes.preview) {
+#Preview("Dynamic Island Expanded Printing", as: .dynamicIsland(.expanded), using: PrinterAttributes.preview) {
     PrinterActivityLiveActivity()
 } contentStates: {
     PrinterAttributes.ContentState.mockPrinting
+}
+
+#Preview("Dynamic Island Expanded Starting", as: .dynamicIsland(.expanded), using: PrinterAttributes.preview) {
+    PrinterActivityLiveActivity()
+} contentStates: {
+    PrinterAttributes.ContentState.mockStarting
 }

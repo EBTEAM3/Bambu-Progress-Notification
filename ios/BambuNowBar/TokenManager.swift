@@ -36,35 +36,21 @@ final class TokenManager {
         // Register for remote notifications — required for push tokens
         UIApplication.shared.registerForRemoteNotifications()
 
-        // Verify Firestore connection immediately
-        Task { await verifyFirestoreConnection() }
-
-        // Start observing push tokens
+        // Observe push-to-start token
         Task { await observePushToStartToken() }
+
+        // Observe new activities (created via push-to-start)
         Task { await observeActivityUpdates() }
+
+        // Pick up any already-running activities (app relaunch / background wake)
+        for activity in Activity<PrinterAttributes>.activities {
+            logger.info("Found existing activity: \(activity.id)")
+            Task { await observeActivityPushToken(activity) }
+        }
 
         statusMessage = activitiesEnabled
             ? "Waiting for push-to-start token..."
             : "Live Activities disabled in Settings"
-    }
-
-    // MARK: - Firestore Connection Verification
-
-    private func verifyFirestoreConnection() async {
-        do {
-            // Write a minimal document to verify Firestore is reachable
-            try await db.collection("bambu_tokens").document(deviceId).setData([
-                "platform": "ios",
-                "updatedAt": FieldValue.serverTimestamp(),
-            ], merge: true)
-            isSynced = true
-            statusMessage = "Firestore connected. Waiting for push-to-start token..."
-            logger.info("Firestore connection verified")
-        } catch {
-            isSynced = false
-            statusMessage = "Firestore error: \(error.localizedDescription)"
-            logger.error("Firestore verification failed: \(error.localizedDescription)")
-        }
     }
 
     // MARK: - Push-to-Start Token
@@ -72,7 +58,7 @@ final class TokenManager {
     private func observePushToStartToken() async {
         for await tokenData in Activity<PrinterAttributes>.pushToStartTokenUpdates {
             let token = tokenData.map { String(format: "%02x", $0) }.joined()
-            logger.info("Push-to-start token: \(token)")
+            logger.info("Push-to-start token: \(token.suffix(8))...")
             pushToStartToken = token
             statusMessage = "Token received, syncing..."
             await syncTokensToFirestore()
@@ -83,7 +69,7 @@ final class TokenManager {
 
     private func observeActivityUpdates() async {
         for await activity in Activity<PrinterAttributes>.activityUpdates {
-            logger.info("New activity: \(activity.id)")
+            logger.info("New activity started: \(activity.id)")
             Task { await observeActivityPushToken(activity) }
         }
     }
@@ -91,7 +77,7 @@ final class TokenManager {
     private func observeActivityPushToken(_ activity: Activity<PrinterAttributes>) async {
         for await tokenData in activity.pushTokenUpdates {
             let token = tokenData.map { String(format: "%02x", $0) }.joined()
-            logger.info("Activity push token: \(token)")
+            logger.info("Activity push token: \(token.suffix(8))...")
             activityPushToken = token
             await syncTokensToFirestore()
         }

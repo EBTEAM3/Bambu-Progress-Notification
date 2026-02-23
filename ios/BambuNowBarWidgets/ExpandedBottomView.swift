@@ -5,11 +5,22 @@ struct ExpandedBottomView: View {
     let state: PrinterAttributes.ContentState
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 10) {
+            // Icon + job name
+            HStack(spacing: 6) {
+                Image(systemName: state.iconName)
+                    .foregroundColor(state.accentColor)
+                Text(state.displayTitle)
+                    .font(.headline)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Progress bar
             if state.isStarting {
                 ProgressView()
                     .progressViewStyle(.linear)
-                    .tint(.blue)
+                    .tint(.orange)
                 Text(state.temperatureInfo ?? "Preparing printer...")
                     .font(.caption2)
                     .foregroundColor(.secondary)
@@ -41,5 +52,6 @@ struct ExpandedBottomView: View {
                 }
             }
         }
+        .padding(.horizontal, 4)
     }
 }

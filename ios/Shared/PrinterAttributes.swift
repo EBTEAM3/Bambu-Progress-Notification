@@ -21,6 +21,7 @@ struct PrinterAttributes: ActivityAttributes {
         var bedTemp: Int?           // current bed temperature (°C)
         var nozzleTargetTemp: Int?  // target nozzle temperature (°C)
         var bedTargetTemp: Int?     // target bed temperature (°C)
+        var chamberTemp: Int?       // current chamber temperature (°C)
     }
 }
 
@@ -64,7 +65,11 @@ extension PrinterAttributes.ContentState {
         } else {
             "\(bed)°C"
         }
-        return "Nozzle \(nozzleStr) · Bed \(bedStr)"
+        var result = "Nozzle \(nozzleStr) · Bed \(bedStr)"
+        if let chamber = chamberTemp, chamber > 0 {
+            result += " · Chamber \(chamber)°C"
+        }
+        return result
     }
 
     var stateLabel: String {
@@ -99,6 +104,16 @@ extension PrinterAttributes.ContentState {
         }
     }
 
+    var compactLeadingTemp: String {
+        if let chamber = chamberTemp, chamber > 0 {
+            return "\(chamber)°"
+        }
+        if let nozzle = nozzleTemp, nozzle > 0 {
+            return "\(nozzle)°"
+        }
+        return "—"
+    }
+
     var trailingText: String {
         switch state {
         case "completed": "Done"
@@ -118,7 +133,10 @@ extension PrinterAttributes.ContentState {
         jobName: "Benchy",
         layerNum: 150,
         totalLayers: 300,
-        state: "printing"
+        state: "printing",
+        nozzleTemp: 220,
+        bedTemp: 60,
+        chamberTemp: 38
     )
 
     static let mockStarting = PrinterAttributes.ContentState(
@@ -131,7 +149,8 @@ extension PrinterAttributes.ContentState {
         nozzleTemp: 150,
         bedTemp: 45,
         nozzleTargetTemp: 220,
-        bedTargetTemp: 60
+        bedTargetTemp: 60,
+        chamberTemp: 28
     )
 
     static let mockCompleted = PrinterAttributes.ContentState(
