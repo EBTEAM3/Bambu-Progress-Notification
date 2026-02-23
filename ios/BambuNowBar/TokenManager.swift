@@ -53,6 +53,42 @@ final class TokenManager {
             : "Live Activities disabled in Settings"
     }
 
+    // MARK: - Background Refresh
+
+    /// One-shot token refresh for background execution.
+    /// Reads current push-to-start token and any active activity tokens, syncs to Firestore, then returns.
+    func refreshTokensInBackground() async {
+        logger.info("Background token refresh starting")
+
+        activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+        guard activitiesEnabled else {
+            logger.info("Live Activities disabled, skipping background refresh")
+            return
+        }
+
+        UIApplication.shared.registerForRemoteNotifications()
+
+        for await tokenData in Activity<PrinterAttributes>.pushToStartTokenUpdates {
+            let token = tokenData.map { String(format: "%02x", $0) }.joined()
+            logger.info("Background: push-to-start token: \(token.suffix(8))...")
+            pushToStartToken = token
+            await syncTokensToFirestore()
+            break
+        }
+
+        for activity in Activity<PrinterAttributes>.activities {
+            for await tokenData in activity.pushTokenUpdates {
+                let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                logger.info("Background: activity push token: \(token.suffix(8))...")
+                activityPushToken = token
+                await syncTokensToFirestore()
+                break
+            }
+        }
+
+        logger.info("Background token refresh complete")
+    }
+
     // MARK: - Push-to-Start Token
 
     private func observePushToStartToken() async {
