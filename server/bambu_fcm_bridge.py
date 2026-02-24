@@ -129,14 +129,17 @@ class APNsSender:
         self._token_time = now
         return self._token
 
-    def send(self, device_token: str, payload_dict: dict, priority: int = 10) -> bool:
+    def send(self, device_token: str, payload_dict: dict, priority: int = 10) -> int:
         """Send an APNs Live Activity notification.
 
         Args:
             priority: 10 = high (counts toward budget), 5 = low (doesn't count).
+
+        Returns:
+            HTTP status code (200 = success, 410 = token expired, 0 = exception).
         """
         if not self._enabled:
-            return False
+            return 0
         try:
             auth = self._get_auth_token()
             topic = f"{self._bundle_id}.push-type.liveactivity"
@@ -150,13 +153,14 @@ class APNsSender:
             response = self._client.post(url, json=payload_dict, headers=headers)
             if response.status_code == 200:
                 logger.info(f"APNs sent (p={priority}) to ...{device_token[-8:]}")
-                return True
+            elif response.status_code == 410:
+                logger.warning(f"APNs 410 Gone — token expired: ...{device_token[-8:]}")
             else:
                 logger.error(f"APNs error {response.status_code}: {response.text}")
-                return False
+            return response.status_code
         except Exception as e:
             logger.error(f"APNs send failed: {e}")
-            return False
+            return 0
 
 
 # =============================================================================
@@ -216,6 +220,34 @@ class FirestoreTokenListener:
 
     def has_tokens(self) -> bool:
         return bool(self._push_to_start_tokens or self._activity_push_tokens)
+
+    def remove_expired_token(self, token: str):
+        """Remove an expired token from local cache and Firestore."""
+        # Find which device_id owns this token
+        for device_id, t in list(self._push_to_start_tokens.items()):
+            if t == token:
+                self._push_to_start_tokens.pop(device_id, None)
+                logger.info(f"Removed expired push-to-start token for {device_id[:8]}...")
+                self._delete_token_field(device_id, 'pushToStartToken')
+                return
+        for device_id, t in list(self._activity_push_tokens.items()):
+            if t == token:
+                self._activity_push_tokens.pop(device_id, None)
+                logger.info(f"Removed expired activity push token for {device_id[:8]}...")
+                self._delete_token_field(device_id, 'activityPushToken')
+                return
+
+    def _delete_token_field(self, device_id: str, field: str):
+        """Delete a specific token field from Firestore."""
+        try:
+            from firebase_admin import firestore
+            db = firestore.client()
+            db.collection('bambu_tokens').document(device_id).update({
+                field: firestore.DELETE_FIELD
+            })
+            logger.info(f"Deleted {field} from Firestore for {device_id[:8]}...")
+        except Exception as e:
+            logger.warning(f"Failed to delete {field} from Firestore: {e}")
 
 
 # =============================================================================
@@ -379,7 +411,9 @@ class BambuFCMBridge:
             }
         }
         for token in tokens:
-            self.apns.send(token, payload, priority=10)
+            status = self.apns.send(token, payload, priority=10)
+            if status == 410:
+                self.token_listener.remove_expired_token(token)
 
     def _send_apns_update(self, priority: int = 5):
         """Update the Live Activity on iOS via APNs.
@@ -403,7 +437,9 @@ class BambuFCMBridge:
             }
         }
         for token in tokens:
-            self.apns.send(token, payload, priority=priority)
+            status = self.apns.send(token, payload, priority=priority)
+            if status == 410:
+                self.token_listener.remove_expired_token(token)
 
     def _send_apns_end(self, dismissal_seconds: int = 14400):
         """End the Live Activity on iOS via APNs. Priority 10."""
@@ -424,7 +460,9 @@ class BambuFCMBridge:
             }
         }
         for token in tokens:
-            self.apns.send(token, payload, priority=10)
+            status = self.apns.send(token, payload, priority=10)
+            if status == 410:
+                self.token_listener.remove_expired_token(token)
 
     def _end_apns_activity(self, dismissal_seconds: int = 14400):
         """End the Live Activity after showing the final state in the Dynamic Island."""
