@@ -41,7 +41,21 @@ Bambu Printer ──MQTT──> Linux Server ──┤
 - **Printer**: Any Bambu Lab printer connected to Bambu Cloud (X1C, P1S, P1P, A1, A1 Mini, etc.)
 - **Server**: Any always-on Linux machine (Raspberry Pi, home server, VPS, WSL, etc.)
 - **Accounts**: Bambu Lab account, Google/Firebase account (free tier)
-- **iOS only**: Apple Developer Program membership ($99/year) for push notifications
+
+### iOS Requires a Paid Apple Developer Account ($99/year)
+
+Android works out of the box — you build the APK, sideload it, done.
+
+iOS is different. The way Live Activities work on iPhone, your server needs to send push notifications through Apple's Push Notification service (APNs) to start, update, and end the Live Activity on your lock screen and Dynamic Island. There is no local alternative — Apple requires all Live Activity updates from a server to go through APNs.
+
+To authenticate with APNs, your server needs a `.p8` key file that can only be generated with a paid Apple Developer Program membership. A free Apple ID is not enough — Apple does not grant push notification capabilities to free accounts. This is an Apple platform restriction, not a limitation of this project.
+
+**What the $99/year gets you:**
+- A `.p8` APNs authentication key (needed for the server to send Live Activity pushes)
+- The ability to sign the app and install it on your iPhone without 7-day expiry
+- Push notification entitlements required by the app
+
+**Without it**, the iOS app will build and install via Xcode, but the server cannot send push notifications, so Live Activities will never appear. The Android side is completely unaffected and works without any paid memberships.
 
 ---
 

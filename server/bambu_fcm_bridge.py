@@ -236,6 +236,10 @@ class PrinterState:
         self.last_sent_state: str = "UNKNOWN"
         self.last_sent_progress: int = -1
         self.last_sent_layer: int = -1
+        self.last_sent_remaining: int = -1
+        self.last_sent_bed_temp: int = -1
+        self.last_sent_chamber_temp: int = -1
+        self.last_sent_nozzle_temp: int = -1
 
 class BambuFCMBridge:
     def __init__(self):
@@ -663,6 +667,10 @@ class BambuFCMBridge:
                         self.state.last_sent_state = self.state.gcode_state
                         self.state.last_sent_progress = self.state.progress
                         self.state.last_sent_layer = self.state.layer_num
+                        self.state.last_sent_remaining = self.state.remaining_time_minutes
+                        self.state.last_sent_bed_temp = self.state.bed_temp
+                        self.state.last_sent_chamber_temp = self.state.chamber_temp
+                        self.state.last_sent_nozzle_temp = self.state.nozzle_temp
                     else:
                         print(f"         ↳ Skipping notification (no change)")
 
@@ -706,6 +714,26 @@ class BambuFCMBridge:
         # Layer change - send when layer advances
         if self.state.layer_num != self.state.last_sent_layer:
             print(f"         ↳ Layer changed: {self.state.last_sent_layer} -> {self.state.layer_num}")
+            return True
+
+        # ETA change
+        if self.state.remaining_time_minutes != self.state.last_sent_remaining:
+            print(f"         ↳ ETA changed: {self.state.last_sent_remaining}m -> {self.state.remaining_time_minutes}m")
+            return True
+
+        # Bed temp change
+        if self.state.bed_temp != self.state.last_sent_bed_temp:
+            print(f"         ↳ Bed temp changed: {self.state.last_sent_bed_temp}°C -> {self.state.bed_temp}°C")
+            return True
+
+        # Chamber temp change
+        if self.state.chamber_temp != self.state.last_sent_chamber_temp:
+            print(f"         ↳ Chamber temp changed: {self.state.last_sent_chamber_temp}°C -> {self.state.chamber_temp}°C")
+            return True
+
+        # Nozzle temp change - only if >3°C difference
+        if abs(self.state.nozzle_temp - self.state.last_sent_nozzle_temp) > 3:
+            print(f"         ↳ Nozzle temp changed: {self.state.last_sent_nozzle_temp}°C -> {self.state.nozzle_temp}°C")
             return True
 
         # No meaningful change
@@ -772,6 +800,10 @@ class BambuFCMBridge:
         self.state.last_sent_state = "UNKNOWN"
         self.state.last_sent_progress = -1
         self.state.last_sent_layer = -1
+        self.state.last_sent_remaining = -1
+        self.state.last_sent_bed_temp = -1
+        self.state.last_sent_chamber_temp = -1
+        self.state.last_sent_nozzle_temp = -1
 
         # Phase 1: PREPARE — heating nozzle & bed (~7 seconds)
         logger.info("Phase 1/3: PREPARE (heating & calibrating)")
