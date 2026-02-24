@@ -5,16 +5,17 @@ struct MinimalView: View {
     let state: PrinterAttributes.ContentState
 
     var body: some View {
-        if state.isCompleted {
+        switch state.status {
+        case .completed:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.green)
-        } else if state.isCancelled {
+        case .cancelled:
             Image(systemName: "xmark.circle.fill")
                 .foregroundColor(.red)
-        } else if state.isStarting {
+        case .preparing:
             ProgressView()
                 .progressViewStyle(.circular)
-        } else {
+        case .printing, .idle:
             Text("\(state.progress)%")
                 .font(.caption)
                 .fontWeight(.bold)

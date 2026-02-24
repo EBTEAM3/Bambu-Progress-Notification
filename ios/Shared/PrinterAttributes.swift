@@ -2,6 +2,19 @@ import ActivityKit
 import Foundation
 import SwiftUI
 
+// MARK: - Printer Status Enum
+
+/// Type-safe representation of printer states. Raw values match the APNs JSON wire format.
+enum PrinterStatus: String, Codable, Hashable {
+    case preparing = "starting"
+    case printing
+    case completed
+    case cancelled
+    case idle
+}
+
+// MARK: - Activity Attributes
+
 /// Defines the data model for the 3D printer Live Activity.
 /// Shared between the main app target and the widget extension target.
 struct PrinterAttributes: ActivityAttributes {
@@ -11,29 +24,31 @@ struct PrinterAttributes: ActivityAttributes {
     /// Dynamic content state — updated via ActivityKit push notifications.
     /// Field names are camelCase to match the APNs JSON payload keys exactly.
     struct ContentState: Codable, Hashable {
-        var progress: Int           // 0-100
-        var remainingMinutes: Int   // ETA in minutes
-        var jobName: String         // print job name (can be empty)
-        var layerNum: Int           // current layer number
-        var totalLayers: Int        // total layer count
-        var state: String           // "starting", "printing", "completed", "cancelled", "idle"
-        var nozzleTemp: Int?        // current nozzle temperature (°C)
-        var bedTemp: Int?           // current bed temperature (°C)
-        var nozzleTargetTemp: Int?  // target nozzle temperature (°C)
-        var bedTargetTemp: Int?     // target bed temperature (°C)
-        var chamberTemp: Int?       // current chamber temperature (°C)
+        var progress: Int              // 0-100
+        var remainingMinutes: Int      // ETA in minutes
+        var jobName: String            // print job name (can be empty)
+        var layerNum: Int              // current layer number
+        var totalLayers: Int           // total layer count
+        var status: PrinterStatus      // current printer state
+        var prepareStage: String?      // preparation substage (e.g. "Auto bed leveling", "Homing toolhead")
+        var nozzleTemp: Int?           // current nozzle temperature (°C)
+        var bedTemp: Int?              // current bed temperature (°C)
+        var nozzleTargetTemp: Int?     // target nozzle temperature (°C)
+        var bedTargetTemp: Int?        // target bed temperature (°C)
+        var chamberTemp: Int?          // current chamber temperature (°C)
+
+        // Map Swift property `status` to JSON key `state` for APNs wire compatibility
+        enum CodingKeys: String, CodingKey {
+            case progress, remainingMinutes, jobName, layerNum, totalLayers
+            case status = "state"
+            case prepareStage, nozzleTemp, bedTemp, nozzleTargetTemp, bedTargetTemp, chamberTemp
+        }
     }
 }
 
 // MARK: - Convenience
 
 extension PrinterAttributes.ContentState {
-    var isStarting: Bool { state == "starting" }
-    var isPrinting: Bool { state == "printing" }
-    var isCompleted: Bool { state == "completed" }
-    var isCancelled: Bool { state == "cancelled" }
-    var isIdle: Bool { state == "idle" }
-
     var formattedTime: String {
         guard remainingMinutes > 0 else { return "<1m" }
         let hours = remainingMinutes / 60
@@ -73,14 +88,19 @@ extension PrinterAttributes.ContentState {
     }
 
     var stateLabel: String {
-        switch state {
-        case "starting": return "Starting"
-        case "printing": return "Printing"
-        case "completed": return "Complete"
-        case "cancelled": return "Cancelled"
-        case "idle": return "Idle"
-        default: return state.capitalized
+        switch status {
+        case .preparing: "Preparing"
+        case .printing:  "Printing"
+        case .completed: "Complete"
+        case .cancelled: "Cancelled"
+        case .idle:      "Idle"
         }
+    }
+
+    /// Human-readable preparation substage, or nil if not preparing
+    var prepareStageLabel: String? {
+        guard status == .preparing, let stage = prepareStage, !stage.isEmpty else { return nil }
+        return stage
     }
 }
 
@@ -88,19 +108,19 @@ extension PrinterAttributes.ContentState {
 
 extension PrinterAttributes.ContentState {
     var iconName: String {
-        switch state {
-        case "completed": "checkmark.circle.fill"
-        case "cancelled": "xmark.circle.fill"
-        default: "printer.fill"
+        switch status {
+        case .completed: "checkmark.circle.fill"
+        case .cancelled: "xmark.circle.fill"
+        case .preparing, .printing, .idle: "printer.fill"
         }
     }
 
     var accentColor: Color {
-        switch state {
-        case "completed": .green
-        case "cancelled": .red
-        case "starting": .orange
-        default: .blue
+        switch status {
+        case .completed: .green
+        case .cancelled: .red
+        case .preparing: .orange
+        case .printing, .idle: .blue
         }
     }
 
@@ -114,12 +134,43 @@ extension PrinterAttributes.ContentState {
         return "—"
     }
 
+    /// Abbreviated temperature lines for compact display: "N 150/220", "B 45/60", "C 28"
+    struct TempLine: Identifiable {
+        let id: String   // "N", "B", "C"
+        let label: String
+        let text: String
+    }
+
+    var compactTemperatureLines: [TempLine] {
+        var lines: [TempLine] = []
+        if let nozzle = nozzleTemp {
+            let text = if let target = nozzleTargetTemp, target > 0 {
+                "\(nozzle)/\(target)"
+            } else {
+                "\(nozzle)"
+            }
+            lines.append(TempLine(id: "N", label: "N", text: text))
+        }
+        if let bed = bedTemp {
+            let text = if let target = bedTargetTemp, target > 0 {
+                "\(bed)/\(target)"
+            } else {
+                "\(bed)"
+            }
+            lines.append(TempLine(id: "B", label: "B", text: text))
+        }
+        if let chamber = chamberTemp, chamber > 0 {
+            lines.append(TempLine(id: "C", label: "C", text: "\(chamber)"))
+        }
+        return lines
+    }
+
     var trailingText: String {
-        switch state {
-        case "completed": "Done"
-        case "cancelled": "Stop"
-        case "starting": "..."
-        default: "\(progress)%"
+        switch status {
+        case .completed: "Done"
+        case .cancelled: "Stop"
+        case .preparing: "..."
+        case .printing, .idle: "\(progress)%"
         }
     }
 }
@@ -133,7 +184,7 @@ extension PrinterAttributes.ContentState {
         jobName: "Benchy",
         layerNum: 150,
         totalLayers: 300,
-        state: "printing",
+        status: .printing,
         nozzleTemp: 220,
         bedTemp: 60,
         chamberTemp: 38
@@ -145,7 +196,8 @@ extension PrinterAttributes.ContentState {
         jobName: "Phone Stand",
         layerNum: 0,
         totalLayers: 500,
-        state: "starting",
+        status: .preparing,
+        prepareStage: "Auto bed leveling",
         nozzleTemp: 150,
         bedTemp: 45,
         nozzleTargetTemp: 220,
@@ -159,7 +211,7 @@ extension PrinterAttributes.ContentState {
         jobName: "Benchy",
         layerNum: 300,
         totalLayers: 300,
-        state: "completed"
+        status: .completed
     )
 
     static let mockCancelled = PrinterAttributes.ContentState(
@@ -168,7 +220,7 @@ extension PrinterAttributes.ContentState {
         jobName: "Phone Case",
         layerNum: 111,
         totalLayers: 300,
-        state: "cancelled"
+        status: .cancelled
     )
 }
 

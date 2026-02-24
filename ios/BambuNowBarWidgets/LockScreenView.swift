@@ -26,36 +26,54 @@ struct LockScreenView: View {
             }
 
             // Progress bar
-            if state.isStarting {
+            switch state.status {
+            case .preparing:
                 ProgressView()
                     .progressViewStyle(.linear)
                     .tint(.blue)
-            } else {
+            case .printing, .completed, .cancelled, .idle:
                 ProgressView(value: Double(state.progress), total: 100)
                     .tint(state.accentColor)
             }
 
-            // Bottom row: layer info + time remaining + percentage
-            HStack {
-                if let layers = state.layerInfo, !state.isStarting {
-                    Label("Layer \(layers)", systemImage: "square.stack.3d.up")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                if state.isStarting {
-                    Text(state.temperatureInfo ?? "Preparing printer...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                } else if state.isCompleted {
+            // Bottom row
+            HStack(alignment: .top) {
+                switch state.status {
+                case .preparing:
+                    if let stage = state.prepareStageLabel {
+                        Label(stage, systemImage: "gearshape.2")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                    Spacer()
+                    CompactTemperatureView(lines: state.compactTemperatureLines)
+                case .completed:
+                    if let layers = state.layerInfo {
+                        Label("Layer \(layers)", systemImage: "square.stack.3d.up")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
                     Text("Print complete!")
                         .font(.caption)
                         .foregroundColor(.green)
-                } else if state.isCancelled {
+                case .cancelled:
+                    if let layers = state.layerInfo {
+                        Label("Layer \(layers)", systemImage: "square.stack.3d.up")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
                     Text("Print cancelled")
                         .font(.caption)
                         .foregroundColor(.red)
-                } else {
+                case .printing, .idle:
+                    if let layers = state.layerInfo {
+                        Label("Layer \(layers)", systemImage: "square.stack.3d.up")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
                     Text("\(state.formattedTime) remaining")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -64,6 +82,11 @@ struct LockScreenView: View {
                         .fontWeight(.bold)
                         .foregroundColor(state.accentColor)
                 }
+            }
+
+            // Temperature row (printing/idle only — preparing shows it in the trailing region)
+            if state.status == .printing || state.status == .idle {
+                CompactTemperatureView(lines: state.compactTemperatureLines, layout: .horizontal)
             }
         }
         .padding()

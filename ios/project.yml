@@ -52,3 +52,14 @@ targets:
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: false
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+
+schemes:
+  BambuNowBar:
+    build:
+      targets:
+        BambuNowBar: all
+        BambuNowBarWidgets: all
+  BambuNowBarWidgets:
+    build:
+      targets:
+        BambuNowBarWidgets: all

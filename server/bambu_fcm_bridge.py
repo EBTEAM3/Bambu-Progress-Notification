@@ -218,10 +218,41 @@ class FirestoreTokenListener:
         return bool(self._push_to_start_tokens or self._activity_push_tokens)
 
 
+# =============================================================================
+# PREPARATION STAGE MAPPING — maps stg_cur numeric values to human-readable names
+# Source: reverse-engineered from Bambu Lab MQTT protocol (ha-bambulab project)
+# =============================================================================
+PREPARATION_STAGES = {
+    -1: None,                           # idle
+    0: None,                            # printing (not a prep stage)
+    1: "Auto bed leveling",
+    2: "Preheating heatbed",
+    3: "Sweeping XY mech mode",
+    4: "Changing filament",
+    5: "M400 pause",
+    6: "Filament runout pause",
+    7: "Heating hotend",
+    8: "Calibrating extrusion",
+    9: "Scanning bed surface",
+    10: "Inspecting first layer",
+    11: "Identifying build plate",
+    12: "Calibrating micro lidar",
+    13: "Homing toolhead",
+    14: "Cleaning nozzle tip",
+    15: "Checking extruder temp",
+    16: "Paused by user",
+    17: "Front cover falling",
+    18: "Calibrating micro lidar",
+    19: "Calibrating extrusion flow",
+    255: None,                          # idle
+}
+
+
 class PrinterState:
     """Tracks current printer state"""
     def __init__(self):
         self.gcode_state: str = "UNKNOWN"
+        self.stg_cur: int = -1          # current preparation stage
         self.progress: int = 0
         self.remaining_time_minutes: int = 0  # Bambu sends minutes
         self.job_name: str = ""
@@ -240,6 +271,7 @@ class PrinterState:
         self.last_sent_bed_temp: int = -1
         self.last_sent_chamber_temp: int = -1
         self.last_sent_nozzle_temp: int = -1
+        self.last_sent_stg_cur: int = -1
 
 class BambuFCMBridge:
     def __init__(self):
@@ -286,11 +318,20 @@ class BambuFCMBridge:
     def _build_content_state(self) -> dict:
         """Build the ContentState dict matching the iOS Swift struct."""
         gcode = self.state.gcode_state
+        stg = self.state.stg_cur
+
+        # Check if stg_cur indicates a preparation substage (1-19 etc.)
+        is_prep_stage = stg in PREPARATION_STAGES and PREPARATION_STAGES[stg] is not None
+        prepare_stage_name = PREPARATION_STAGES.get(stg) if is_prep_stage else None
+
         if gcode in ("FINISH", "COMPLETED"):
             state_str = "completed"
         elif gcode in ("CANCELLED", "FAILED"):
             state_str = "cancelled"
         elif gcode == "PREPARE":
+            state_str = "starting"
+        elif gcode in ("RUNNING", "PRINTING") and is_prep_stage:
+            # Printer reports RUNNING but is still in a preparation substage
             state_str = "starting"
         elif gcode in ("RUNNING", "PRINTING"):
             state_str = "printing"
@@ -304,6 +345,7 @@ class BambuFCMBridge:
             "layerNum": self.state.layer_num,
             "totalLayers": self.state.total_layers,
             "state": state_str,
+            "prepareStage": prepare_stage_name or "",
             "nozzleTemp": self.state.nozzle_temp,
             "bedTemp": self.state.bed_temp,
             "nozzleTargetTemp": self.state.nozzle_target_temp,
@@ -427,8 +469,17 @@ class BambuFCMBridge:
         """Send print progress update via FCM"""
         now = time.time()
 
-        # Check state type
-        is_printing = self.state.gcode_state in ["RUNNING", "PRINTING", "PREPARE"]
+        # Check stg_cur to determine if still preparing
+        stg = self.state.stg_cur
+        is_prep_stage = stg in PREPARATION_STAGES and PREPARATION_STAGES[stg] is not None
+        prepare_stage_name = PREPARATION_STAGES.get(stg, "") if is_prep_stage else ""
+
+        # Check state type — use stg_cur to keep "starting" during prep substages
+        is_preparing = (
+            self.state.gcode_state == "PREPARE"
+            or (self.state.gcode_state in ["RUNNING", "PRINTING"] and is_prep_stage)
+        )
+        is_printing = self.state.gcode_state in ["RUNNING", "PRINTING"] and not is_prep_stage
         is_finished = self.state.gcode_state in ["FINISH", "COMPLETED"]
         is_cancelled = self.state.gcode_state in ["CANCELLED", "FAILED"]
         is_idle = self.state.gcode_state in ["IDLE", "UNKNOWN"]
@@ -442,9 +493,10 @@ class BambuFCMBridge:
             title = "Print Cancelled"
             body = f"{self.state.job_name or 'Print'} was cancelled"
             notification_type = "cancelled"
-        elif self.state.gcode_state == "PREPARE":
+        elif is_preparing:
             title = "Print Starting..."
-            body = f"Preparing: {self.state.job_name or 'Print job'}"
+            stage_desc = prepare_stage_name or "Preparing"
+            body = f"{stage_desc}: {self.state.job_name or 'Print job'}"
             notification_type = "starting"
         elif is_printing:
             remaining = self._format_time(self.state.remaining_time_minutes)
@@ -475,6 +527,7 @@ class BambuFCMBridge:
             "bed_temp": str(self.state.bed_temp),
             "bed_target_temp": str(self.state.bed_target_temp),
             "chamber_temp": str(self.state.chamber_temp),
+            "prepare_stage": prepare_stage_name,
             "timestamp": str(int(now)),
         }
 
@@ -634,6 +687,10 @@ class BambuFCMBridge:
                     self.state.chamber_temp = round(print_data["chamber_temper"])
                     updated = True
 
+                if "stg_cur" in print_data:
+                    self.state.stg_cur = print_data["stg_cur"]
+                    updated = True
+
                 if "subtask_name" in print_data:
                     self.state.job_name = print_data["subtask_name"]
                     updated = True
@@ -671,6 +728,7 @@ class BambuFCMBridge:
                         self.state.last_sent_bed_temp = self.state.bed_temp
                         self.state.last_sent_chamber_temp = self.state.chamber_temp
                         self.state.last_sent_nozzle_temp = self.state.nozzle_temp
+                        self.state.last_sent_stg_cur = self.state.stg_cur
                     else:
                         print(f"         ↳ Skipping notification (no change)")
 
@@ -689,9 +747,13 @@ class BambuFCMBridge:
         mins = remaining % 60
         time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
 
+        # Show preparation substage if active
+        stg_name = PREPARATION_STAGES.get(self.state.stg_cur)
+        stage_str = f" [{stg_name}]" if stg_name else ""
+
         # Print formatted update (same format as reference script)
         print(f"[{timestamp}] 📊 {self.state.job_name or 'Unknown'} | "
-              f"{self.state.gcode_state} | "
+              f"{self.state.gcode_state}{stage_str} | "
               f"{self.state.progress}% | "
               f"Layer {self.state.layer_num}/{self.state.total_layers} | "
               f"ETA: {time_str} | "
@@ -734,6 +796,13 @@ class BambuFCMBridge:
         # Nozzle temp change - only if >3°C difference
         if abs(self.state.nozzle_temp - self.state.last_sent_nozzle_temp) > 3:
             print(f"         ↳ Nozzle temp changed: {self.state.last_sent_nozzle_temp}°C -> {self.state.nozzle_temp}°C")
+            return True
+
+        # Preparation substage change (e.g. homing → bed leveling → calibrating)
+        if self.state.stg_cur != self.state.last_sent_stg_cur:
+            old_name = PREPARATION_STAGES.get(self.state.last_sent_stg_cur, str(self.state.last_sent_stg_cur))
+            new_name = PREPARATION_STAGES.get(self.state.stg_cur, str(self.state.stg_cur))
+            print(f"         ↳ Prep stage changed: {old_name} -> {new_name}")
             return True
 
         # No meaningful change
@@ -805,7 +874,7 @@ class BambuFCMBridge:
         self.state.last_sent_chamber_temp = -1
         self.state.last_sent_nozzle_temp = -1
 
-        # Phase 1: PREPARE — heating nozzle & bed (~7 seconds)
+        # Phase 1: PREPARE — heating, homing, calibrating (~12 seconds)
         logger.info("Phase 1/3: PREPARE (heating & calibrating)")
         self.state.gcode_state = "PREPARE"
         self.state.progress = 0
@@ -819,26 +888,35 @@ class BambuFCMBridge:
         self.state.bed_target_temp = target_bed
         self.state.chamber_temp = 22
 
-        # Send the starting notification (starts iOS Live Activity)
-        self._print_status_update()
-        self.send_print_update()
-        self.state.last_sent_state = self.state.gcode_state
-        self.state.last_sent_progress = self.state.progress
-        self.state.last_sent_layer = self.state.layer_num
-
-        # Simulate heating ramp — send updates so phone shows temp progress
-        heat_steps = 3
-        for i in range(1, heat_steps + 1):
-            time.sleep(2)
-            self.state.nozzle_temp = min(target_nozzle, 25 + i * (target_nozzle - 25) // heat_steps)
-            self.state.bed_temp = min(target_bed, 25 + i * (target_bed - 25) // heat_steps)
-            self.state.chamber_temp = 22 + i * 16 // heat_steps  # ramps ~22→38°C
+        # Simulate preparation substages in realistic Bambu print order:
+        # 1. Homing → 2. Bed leveling → 3. Bed heating → 4. Hotend heating
+        # → 5. Cleaning nozzle → 6. Calibrating extrusion
+        prep_stages = [
+            (13, "Homing toolhead"),
+            (1, "Auto bed leveling"),
+            (2, "Preheating heatbed"),
+            (7, "Heating hotend"),
+            (14, "Cleaning nozzle tip"),
+            (8, "Calibrating extrusion"),
+        ]
+        for i, (stg_id, stg_name) in enumerate(prep_stages):
+            self.state.stg_cur = stg_id
+            # Ramp temperatures during preparation
+            frac = (i + 1) / len(prep_stages)
+            self.state.nozzle_temp = min(target_nozzle, int(25 + frac * (target_nozzle - 25)))
+            self.state.bed_temp = min(target_bed, int(25 + frac * (target_bed - 25)))
+            self.state.chamber_temp = int(22 + frac * 16)  # ramps ~22→38°C
+            logger.info(f"  Prep stage: {stg_name} (stg_cur={stg_id})")
             self._print_status_update()
             self.send_print_update()
+            self.state.last_sent_state = self.state.gcode_state
+            self.state.last_sent_stg_cur = self.state.stg_cur
+            time.sleep(2)
 
         # Phase 2: RUNNING — progress 0→100% in 20% steps (~10 seconds)
         logger.info("Phase 2/3: RUNNING (printing)")
         self.state.gcode_state = "RUNNING"
+        self.state.stg_cur = 0  # stg_cur=0 means actual printing
         steps = 5
         for i in range(1, steps + 1):
             self.state.progress = min(int(i * 100 / steps), 100)

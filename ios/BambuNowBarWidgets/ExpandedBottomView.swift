@@ -16,27 +16,45 @@ struct ExpandedBottomView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Progress bar
-            if state.isStarting {
+            // Progress bar + details
+            switch state.status {
+            case .preparing:
                 ProgressView()
                     .progressViewStyle(.linear)
                     .tint(.orange)
-                Text(state.temperatureInfo ?? "Preparing printer...")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            } else if state.isCompleted {
+                HStack {
+                    if let stage = state.prepareStageLabel {
+                        HStack(spacing: 4) {
+                            Image(systemName: "gearshape.2")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                            Text(stage)
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
+                    } else {
+                        Text("Preparing printer...")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Text("\(state.formattedTime) remaining")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            case .completed:
                 ProgressView(value: 1.0, total: 1.0)
                     .tint(.green)
                 Text("Print complete!")
                     .font(.caption2)
                     .foregroundColor(.green)
-            } else if state.isCancelled {
+            case .cancelled:
                 ProgressView(value: Double(state.progress), total: 100)
                     .tint(.red)
                 Text("Print cancelled")
                     .font(.caption2)
                     .foregroundColor(.red)
-            } else {
+            case .printing, .idle:
                 ProgressView(value: Double(state.progress), total: 100)
                     .tint(.blue)
                 HStack {
@@ -50,6 +68,7 @@ struct ExpandedBottomView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
+                CompactTemperatureView(lines: state.compactTemperatureLines, layout: .horizontal)
             }
         }
         .padding(.horizontal, 4)
