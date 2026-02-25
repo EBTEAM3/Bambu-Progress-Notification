@@ -252,7 +252,8 @@ class FirestoreTokenListener:
 
 # =============================================================================
 # PREPARATION STAGE MAPPING — maps stg_cur numeric values to human-readable names
-# Source: reverse-engineered from Bambu Lab MQTT protocol (ha-bambulab project)
+# Source: ha-bambulab Home Assistant integration (https://github.com/greghesp/ha-bambulab)
+#         CURRENT_STAGE_IDS in custom_components/bambu_lab/pybambu/const.py
 # =============================================================================
 PREPARATION_STAGES = {
     -1: None,                           # idle
@@ -308,7 +309,50 @@ PREPARATION_STAGES = {
     49: "Heating chamber",
     50: "Cooling heatbed",
     51: "Printing calibration lines",
+    52: "Checking material",
+    53: "Live view camera calibration",
+    54: "Waiting for heatbed temp",
+    55: "Checking material position",
+    56: "Cutting module offset calibration",
+    57: "Measuring surface",
+    58: "Thermal preconditioning",
+    59: "Homing blade holder",
+    60: "Calibrating camera offset",
+    61: "Calibrating blade holder",
+    62: "Hotend pick and place test",
+    63: "Waiting for chamber temp",
+    64: "Preparing hotend",
+    65: "Calibrating nozzle clump detection",
+    66: "Purifying chamber air",
+    77: "Preparing AMS",
     255: None,                          # idle
+}
+
+# Stage categories — groups stg_cur values by semantic meaning.
+# Combined with layer_num to distinguish pre-print stages from mid-print interruptions.
+STAGE_CATEGORIES = {
+    # prepare — normal pre-print setup
+    1: "prepare", 2: "prepare", 3: "prepare", 7: "prepare", 9: "prepare",
+    11: "prepare", 13: "prepare", 14: "prepare", 15: "prepare", 29: "prepare",
+    40: "prepare", 41: "prepare", 42: "prepare", 47: "prepare", 48: "prepare",
+    49: "prepare", 50: "prepare", 51: "prepare", 52: "prepare", 54: "prepare",
+    55: "prepare", 57: "prepare", 58: "prepare", 59: "prepare", 63: "prepare",
+    64: "prepare", 66: "prepare", 77: "prepare",
+    # calibrate — calibration/scanning steps
+    8: "calibrate", 10: "calibrate", 12: "calibrate", 18: "calibrate",
+    19: "calibrate", 25: "calibrate", 31: "calibrate", 36: "calibrate",
+    37: "calibrate", 38: "calibrate", 39: "calibrate", 43: "calibrate",
+    44: "calibrate", 45: "calibrate", 46: "calibrate", 53: "calibrate",
+    56: "calibrate", 60: "calibrate", 61: "calibrate", 62: "calibrate",
+    65: "calibrate",
+    # paused — expected interruptions
+    5: "paused", 16: "paused", 30: "paused",
+    # filament — filament operations (context-dependent on layer_num)
+    4: "filament", 22: "filament", 24: "filament",
+    # issue — errors/malfunctions requiring attention
+    6: "issue", 17: "issue", 20: "issue", 21: "issue", 23: "issue",
+    26: "issue", 27: "issue", 28: "issue", 32: "issue", 33: "issue",
+    34: "issue", 35: "issue",
 }
 
 
@@ -379,28 +423,57 @@ class BambuFCMBridge:
         except Exception as e:
             logger.error(f"Failed to initialize APNs: {e}")
 
-    def _build_content_state(self) -> dict:
-        """Build the ContentState dict matching the iOS Swift struct."""
+    def _determine_state(self) -> tuple:
+        """Determine notification state and stage category from printer state.
+
+        Uses STAGE_CATEGORIES + layer_num to distinguish pre-print stages
+        from mid-print interruptions.
+
+        Returns:
+            (state_str, category) where state_str is one of
+            "completed", "cancelled", "starting", "paused", "issue", "printing", "idle"
+            and category is "prepare"/"calibrate"/"paused"/"filament"/"issue" or None.
+        """
         gcode = self.state.gcode_state
         stg = self.state.stg_cur
-
-        # Check if stg_cur indicates a preparation substage (1-19 etc.)
-        is_prep_stage = stg in PREPARATION_STAGES and PREPARATION_STAGES[stg] is not None
-        prepare_stage_name = PREPARATION_STAGES.get(stg) if is_prep_stage else None
+        layer = self.state.layer_num
 
         if gcode in ("FINISH", "COMPLETED"):
-            state_str = "completed"
-        elif gcode in ("CANCELLED", "FAILED"):
-            state_str = "cancelled"
-        elif gcode == "PREPARE":
-            state_str = "starting"
-        elif gcode in ("RUNNING", "PRINTING") and is_prep_stage:
-            # Printer reports RUNNING but is still in a preparation substage
-            state_str = "starting"
-        elif gcode in ("RUNNING", "PRINTING"):
-            state_str = "printing"
-        else:
-            state_str = "idle"
+            return "completed", None
+        if gcode in ("CANCELLED", "FAILED"):
+            return "cancelled", None
+
+        # Bambu Studio pause sends gcode_state "PAUSE"
+        if gcode == "PAUSE":
+            stage_name = PREPARATION_STAGES.get(stg)
+            return "paused", STAGE_CATEGORIES.get(stg, "paused")
+
+        category = STAGE_CATEGORIES.get(stg)
+        stage_name = PREPARATION_STAGES.get(stg)
+
+        # Pauses and issues are always interruptions, regardless of layer
+        if category in ("paused", "issue"):
+            return category, category
+
+        # Prep/calibration/filament stages: use layer_num to determine context
+        if category in ("prepare", "calibrate", "filament"):
+            if gcode == "PREPARE" or (gcode in ("RUNNING", "PRINTING") and stage_name is not None):
+                if layer >= 1:
+                    # Mid-print interruption (e.g. AMS filament change at layer 50)
+                    return "paused", category
+                else:
+                    # Normal pre-print stage
+                    return "starting", category
+
+        if gcode in ("RUNNING", "PRINTING"):
+            return "printing", None
+
+        return "idle", None
+
+    def _build_content_state(self) -> dict:
+        """Build the ContentState dict matching the iOS Swift struct."""
+        state_str, category = self._determine_state()
+        stage_name = PREPARATION_STAGES.get(self.state.stg_cur)
 
         return {
             "progress": self.state.progress,
@@ -409,7 +482,8 @@ class BambuFCMBridge:
             "layerNum": self.state.layer_num,
             "totalLayers": self.state.total_layers,
             "state": state_str,
-            "prepareStage": prepare_stage_name or "",
+            "prepareStage": stage_name or "",
+            "stageCategory": category or "",
             "nozzleTemp": self.state.nozzle_temp,
             "bedTemp": self.state.bed_temp,
             "nozzleTargetTemp": self.state.nozzle_target_temp,
@@ -536,52 +610,50 @@ class BambuFCMBridge:
                 logger.error(f"Failed to send FCM: {e}")
 
     def send_print_update(self):
-        """Send print progress update via FCM"""
+        """Send print progress update via FCM and APNs"""
         now = time.time()
+        state_str, category = self._determine_state()
+        stage_name = PREPARATION_STAGES.get(self.state.stg_cur, "")
 
-        # Check stg_cur to determine if still preparing
-        stg = self.state.stg_cur
-        is_prep_stage = stg in PREPARATION_STAGES and PREPARATION_STAGES[stg] is not None
-        prepare_stage_name = PREPARATION_STAGES.get(stg, "") if is_prep_stage else ""
-
-        # Check state type — use stg_cur to keep "starting" during prep substages
-        is_preparing = (
-            self.state.gcode_state == "PREPARE"
-            or (self.state.gcode_state in ["RUNNING", "PRINTING"] and is_prep_stage)
-        )
-        is_printing = self.state.gcode_state in ["RUNNING", "PRINTING"] and not is_prep_stage
-        is_finished = self.state.gcode_state in ["FINISH", "COMPLETED"]
-        is_cancelled = self.state.gcode_state in ["CANCELLED", "FAILED"]
-        is_idle = self.state.gcode_state in ["IDLE", "UNKNOWN"]
+        # Map state to FCM notification type
+        notification_type_map = {
+            "completed": "completed",
+            "cancelled": "cancelled",
+            "starting": "starting",
+            "paused": "paused",
+            "issue": "issue",
+            "printing": "progress",
+            "idle": "idle",
+        }
+        notification_type = notification_type_map.get(state_str, "unknown")
 
         # Determine notification content
-        if is_finished:
+        if notification_type == "completed":
             title = "Print Complete!"
             body = f"{self.state.job_name or 'Print'} finished successfully"
-            notification_type = "completed"
-        elif is_cancelled:
+        elif notification_type == "cancelled":
             title = "Print Cancelled"
             body = f"{self.state.job_name or 'Print'} was cancelled"
-            notification_type = "cancelled"
-        elif is_preparing:
+        elif notification_type == "starting":
             title = "Print Starting..."
-            stage_desc = prepare_stage_name or "Preparing"
+            stage_desc = stage_name or "Preparing"
             body = f"{stage_desc}: {self.state.job_name or 'Print job'}"
-            notification_type = "starting"
-        elif is_printing:
+        elif notification_type == "paused":
+            title = "Print Paused"
+            body = f"{stage_name or 'Paused'}: {self.state.job_name or 'Print job'}"
+        elif notification_type == "issue":
+            title = "Printer Issue"
+            body = f"{stage_name or 'Issue'}: {self.state.job_name or 'Print job'}"
+        elif notification_type == "progress":
             remaining = self._format_time(self.state.remaining_time_minutes)
             title = f"Printing: {self.state.progress}%"
             body = f"{self.state.job_name or 'Print'} - {remaining} remaining"
-            notification_type = "progress"
-        elif is_idle:
-            # Send idle state too so app can clear notification
+        elif notification_type == "idle":
             title = "Printer Idle"
             body = "Ready for next print"
-            notification_type = "idle"
         else:
             title = f"Printer: {self.state.gcode_state}"
             body = self.state.job_name or "Unknown state"
-            notification_type = "unknown"
 
         # Data payload for the app
         data = {
@@ -597,7 +669,8 @@ class BambuFCMBridge:
             "bed_temp": str(self.state.bed_temp),
             "bed_target_temp": str(self.state.bed_target_temp),
             "chamber_temp": str(self.state.chamber_temp),
-            "prepare_stage": prepare_stage_name,
+            "prepare_stage": stage_name or "",
+            "stage_category": category or "",
             "timestamp": str(int(now)),
         }
 
@@ -609,7 +682,7 @@ class BambuFCMBridge:
             pts_count = len(self.token_listener.push_to_start_tokens)
             apt_count = len(self.token_listener.activity_push_tokens)
 
-            if notification_type == "starting":
+            if notification_type in ("starting", "paused", "issue"):
                 if not self._apns_activity_active:
                     if pts_count > 0:
                         logger.info(f"APNs: starting Live Activity ({pts_count} push-to-start token(s))")
@@ -619,7 +692,9 @@ class BambuFCMBridge:
                         logger.warning("APNs: no push-to-start tokens in Firestore — cannot start Live Activity")
                 else:
                     if apt_count > 0:
-                        self._send_apns_update(priority=5)  # routine heating update
+                        # Pauses and issues are important state changes (priority 10)
+                        priority = 10 if notification_type in ("paused", "issue") else 5
+                        self._send_apns_update(priority=priority)
                     else:
                         logger.debug("APNs: waiting for activity push token during PREPARE")
             elif notification_type == "progress":
@@ -833,6 +908,13 @@ class BambuFCMBridge:
 
     def _has_meaningful_change(self) -> bool:
         """Check if state has changed enough to warrant sending FCM"""
+        # APNs Live Activity not started yet — keep retrying so we pick up
+        # running prints after a server restart (tokens may not be loaded yet)
+        if (self.apns and self.apns.enabled and not self._apns_activity_active
+                and self.state.gcode_state in ("RUNNING", "PRINTING", "PREPARE", "PAUSE")):
+            print(f"         ↳ APNs activity not started yet — retrying")
+            return True
+
         # State change (IDLE -> RUNNING, RUNNING -> FINISH, etc.) - always send
         if self.state.gcode_state != self.state.last_sent_state:
             print(f"         ↳ State changed: {self.state.last_sent_state} -> {self.state.gcode_state}")
@@ -909,7 +991,7 @@ class BambuFCMBridge:
         Useful for verifying that notifications arrive correctly on all devices.
         """
         logger.info("=" * 50)
-        logger.info("TEST MODE: Simulating a ~25-second print cycle...")
+        logger.info("TEST MODE: Simulating a ~35-second print cycle...")
         logger.info("=" * 50)
 
         # Wait for Firestore tokens to load (they arrive asynchronously)
@@ -945,7 +1027,7 @@ class BambuFCMBridge:
         self.state.last_sent_nozzle_temp = -1
 
         # Phase 1: PREPARE — heating, homing, calibrating (~12 seconds)
-        logger.info("Phase 1/3: PREPARE (heating & calibrating)")
+        logger.info("Phase 1/5: PREPARE (heating & calibrating)")
         self.state.gcode_state = "PREPARE"
         self.state.progress = 0
         self.state.layer_num = 0
@@ -983,25 +1065,55 @@ class BambuFCMBridge:
             self.state.last_sent_stg_cur = self.state.stg_cur
             time.sleep(2)
 
-        # Phase 2: RUNNING — progress 0→100% in 20% steps (~10 seconds)
-        logger.info("Phase 2/3: RUNNING (printing)")
+        # Phase 2: RUNNING — progress 0→40% (~4 seconds)
+        logger.info("Phase 2/5: RUNNING (printing)")
         self.state.gcode_state = "RUNNING"
         self.state.stg_cur = 0  # stg_cur=0 means actual printing
-        steps = 5
-        for i in range(1, steps + 1):
-            self.state.progress = min(int(i * 100 / steps), 100)
-            self.state.layer_num = int(self.state.progress * total_layers / 100)
-            self.state.remaining_time_minutes = max(0, int(45 * (1 - self.state.progress / 100)))
-
+        for pct in (20, 40):
+            self.state.progress = pct
+            self.state.layer_num = int(pct * total_layers / 100)
+            self.state.remaining_time_minutes = max(0, int(45 * (1 - pct / 100)))
             self._print_status_update()
             self.send_print_update()
             self.state.last_sent_state = self.state.gcode_state
             self.state.last_sent_progress = self.state.progress
             self.state.last_sent_layer = self.state.layer_num
+            self.state.last_sent_stg_cur = self.state.stg_cur
             time.sleep(2)
 
-        # Phase 3: FINISH — print complete (~3 seconds)
-        logger.info("Phase 3/3: FINISH (completed)")
+        # Phase 3: Mid-print filament change (paused state) (~3 seconds)
+        logger.info("Phase 3/5: Mid-print filament change (paused)")
+        self.state.stg_cur = 4  # Changing filament
+        self._print_status_update()
+        self.send_print_update()
+        self.state.last_sent_stg_cur = self.state.stg_cur
+        time.sleep(3)
+
+        # Phase 3b: Mid-print nozzle clog (issue state) (~3 seconds)
+        logger.info("Phase 3/5: Mid-print nozzle clog (issue)")
+        self.state.stg_cur = 35  # Nozzle clog
+        self._print_status_update()
+        self.send_print_update()
+        self.state.last_sent_stg_cur = self.state.stg_cur
+        time.sleep(3)
+
+        # Phase 4: Resume printing — progress 60→100% (~4 seconds)
+        logger.info("Phase 4/5: RUNNING (resumed)")
+        self.state.stg_cur = 0
+        for pct in (60, 80, 100):
+            self.state.progress = pct
+            self.state.layer_num = int(pct * total_layers / 100)
+            self.state.remaining_time_minutes = max(0, int(45 * (1 - pct / 100)))
+            self._print_status_update()
+            self.send_print_update()
+            self.state.last_sent_state = self.state.gcode_state
+            self.state.last_sent_progress = self.state.progress
+            self.state.last_sent_layer = self.state.layer_num
+            self.state.last_sent_stg_cur = self.state.stg_cur
+            time.sleep(2)
+
+        # Phase 5: FINISH — print complete (~3 seconds)
+        logger.info("Phase 5/5: FINISH (completed)")
         self.state.gcode_state = "FINISH"
         self.state.progress = 100
         self.state.layer_num = total_layers

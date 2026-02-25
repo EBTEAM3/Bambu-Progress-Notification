@@ -8,6 +8,8 @@ import SwiftUI
 enum PrinterStatus: String, Codable, Hashable {
     case preparing = "starting"
     case printing
+    case paused
+    case issue
     case completed
     case cancelled
     case idle
@@ -30,7 +32,8 @@ struct PrinterAttributes: ActivityAttributes {
         var layerNum: Int              // current layer number
         var totalLayers: Int           // total layer count
         var status: PrinterStatus      // current printer state
-        var prepareStage: String?      // preparation substage (e.g. "Auto bed leveling", "Homing toolhead")
+        var prepareStage: String?      // stage description (e.g. "Auto bed leveling", "Nozzle clog")
+        var stageCategory: String?     // "prepare", "calibrate", "paused", "filament", "issue"
         var nozzleTemp: Int?           // current nozzle temperature (°C)
         var bedTemp: Int?              // current bed temperature (°C)
         var nozzleTargetTemp: Int?     // target nozzle temperature (°C)
@@ -41,7 +44,8 @@ struct PrinterAttributes: ActivityAttributes {
         enum CodingKeys: String, CodingKey {
             case progress, remainingMinutes, jobName, layerNum, totalLayers
             case status = "state"
-            case prepareStage, nozzleTemp, bedTemp, nozzleTargetTemp, bedTargetTemp, chamberTemp
+            case prepareStage, stageCategory
+            case nozzleTemp, bedTemp, nozzleTargetTemp, bedTargetTemp, chamberTemp
         }
     }
 }
@@ -89,17 +93,24 @@ extension PrinterAttributes.ContentState {
 
     var stateLabel: String {
         switch status {
-        case .preparing: "Preparing"
-        case .printing:  "Printing"
-        case .completed: "Complete"
-        case .cancelled: "Cancelled"
-        case .idle:      "Idle"
+        case .preparing:
+            if stageCategory == "calibrate" { return "Calibrating" }
+            return "Preparing"
+        case .printing:  return "Printing"
+        case .paused:
+            if stageCategory == "filament" { return "Filament" }
+            return "Paused"
+        case .issue:     return "Issue"
+        case .completed: return "Complete"
+        case .cancelled: return "Cancelled"
+        case .idle:      return "Idle"
         }
     }
 
-    /// Human-readable preparation substage, or nil if not preparing
+    /// Human-readable stage description, shown for preparing/paused/issue states
     var prepareStageLabel: String? {
-        guard status == .preparing, let stage = prepareStage, !stage.isEmpty else { return nil }
+        guard [.preparing, .paused, .issue].contains(status),
+              let stage = prepareStage, !stage.isEmpty else { return nil }
         return stage
     }
 }
@@ -111,6 +122,8 @@ extension PrinterAttributes.ContentState {
         switch status {
         case .completed: "checkmark.circle.fill"
         case .cancelled: "xmark.circle.fill"
+        case .paused:    "pause.circle.fill"
+        case .issue:     "exclamationmark.triangle.fill"
         case .preparing, .printing, .idle: "printer.fill"
         }
     }
@@ -120,6 +133,8 @@ extension PrinterAttributes.ContentState {
         case .completed: .green
         case .cancelled: .red
         case .preparing: .orange
+        case .paused:    .yellow
+        case .issue:     .red
         case .printing, .idle: .blue
         }
     }
@@ -170,6 +185,8 @@ extension PrinterAttributes.ContentState {
         case .completed: "Done"
         case .cancelled: "Stop"
         case .preparing: "..."
+        case .paused:    "\(progress)%"
+        case .issue:     "!"
         case .printing, .idle: "\(progress)%"
         }
     }
@@ -221,6 +238,34 @@ extension PrinterAttributes.ContentState {
         layerNum: 111,
         totalLayers: 300,
         status: .cancelled
+    )
+
+    static let mockPaused = PrinterAttributes.ContentState(
+        progress: 42,
+        remainingMinutes: 83,
+        jobName: "Benchy",
+        layerNum: 150,
+        totalLayers: 300,
+        status: .paused,
+        prepareStage: "Changing filament",
+        stageCategory: "filament",
+        nozzleTemp: 220,
+        bedTemp: 60,
+        chamberTemp: 38
+    )
+
+    static let mockIssue = PrinterAttributes.ContentState(
+        progress: 42,
+        remainingMinutes: 83,
+        jobName: "Benchy",
+        layerNum: 150,
+        totalLayers: 300,
+        status: .issue,
+        prepareStage: "Paused: nozzle clog",
+        stageCategory: "issue",
+        nozzleTemp: 220,
+        bedTemp: 60,
+        chamberTemp: 38
     )
 }
 

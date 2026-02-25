@@ -31,6 +31,12 @@ struct LockScreenView: View {
                 ProgressView()
                     .progressViewStyle(.linear)
                     .tint(.blue)
+            case .paused:
+                ProgressView(value: Double(state.progress), total: 100)
+                    .tint(.yellow)
+            case .issue:
+                ProgressView(value: Double(state.progress), total: 100)
+                    .tint(.red)
             case .printing, .completed, .cancelled, .idle:
                 ProgressView(value: Double(state.progress), total: 100)
                     .tint(state.accentColor)
@@ -47,6 +53,22 @@ struct LockScreenView: View {
                     }
                     Spacer()
                     CompactTemperatureView(lines: state.compactTemperatureLines)
+                case .paused, .issue:
+                    if let stage = state.prepareStageLabel {
+                        Label(stage, systemImage: state.iconName)
+                            .font(.caption)
+                            .foregroundColor(state.accentColor)
+                    }
+                    Spacer()
+                    if let layers = state.layerInfo {
+                        Label("Layer \(layers)", systemImage: "square.stack.3d.up")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Text("\(state.progress)%")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(state.accentColor)
                 case .completed:
                     if let layers = state.layerInfo {
                         Label("Layer \(layers)", systemImage: "square.stack.3d.up")
@@ -84,8 +106,8 @@ struct LockScreenView: View {
                 }
             }
 
-            // Temperature row (printing/idle only — preparing shows it in the trailing region)
-            if state.status == .printing || state.status == .idle {
+            // Temperature row (shown for printing, paused, and issue states)
+            if [.printing, .idle, .paused, .issue].contains(state.status) {
                 CompactTemperatureView(lines: state.compactTemperatureLines, layout: .horizontal)
             }
         }

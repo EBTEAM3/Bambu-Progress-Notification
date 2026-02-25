@@ -7,7 +7,7 @@ struct CompactLeadingView: View {
 
     var body: some View {
         switch state.status {
-        case .completed, .cancelled:
+        case .completed, .cancelled, .paused, .issue:
             Image(systemName: state.iconName)
                 .font(.body)
                 .foregroundColor(state.accentColor)

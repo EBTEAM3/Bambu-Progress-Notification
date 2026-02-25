@@ -13,7 +13,7 @@ struct ExpandedTrailingView: View {
                 CompactTemperatureView(lines: state.compactTemperatureLines)
                 Spacer()
             }
-        case .printing, .idle, .completed, .cancelled:
+        case .printing, .idle, .completed, .cancelled, .paused, .issue:
             HStack {
                 Spacer()
 

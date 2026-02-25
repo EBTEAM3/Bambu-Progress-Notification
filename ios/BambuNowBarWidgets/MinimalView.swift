@@ -12,6 +12,12 @@ struct MinimalView: View {
         case .cancelled:
             Image(systemName: "xmark.circle.fill")
                 .foregroundColor(.red)
+        case .paused:
+            Image(systemName: "pause.circle.fill")
+                .foregroundColor(.yellow)
+        case .issue:
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.red)
         case .preparing:
             ProgressView()
                 .progressViewStyle(.circular)

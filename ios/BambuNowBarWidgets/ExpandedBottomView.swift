@@ -42,6 +42,32 @@ struct ExpandedBottomView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
+            case .paused, .issue:
+                ProgressView(value: Double(state.progress), total: 100)
+                    .tint(state.accentColor)
+                HStack {
+                    if let stage = state.prepareStageLabel {
+                        HStack(spacing: 4) {
+                            Image(systemName: state.iconName)
+                                .font(.caption2)
+                                .foregroundColor(state.accentColor)
+                            Text(stage)
+                                .font(.caption2)
+                                .foregroundColor(state.accentColor)
+                        }
+                    } else {
+                        Text(state.stateLabel)
+                            .font(.caption2)
+                            .foregroundColor(state.accentColor)
+                    }
+                    Spacer()
+                    if let layers = state.layerInfo {
+                        Text("Layer \(layers)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                CompactTemperatureView(lines: state.compactTemperatureLines, layout: .horizontal)
             case .completed:
                 ProgressView(value: 1.0, total: 1.0)
                     .tint(.green)

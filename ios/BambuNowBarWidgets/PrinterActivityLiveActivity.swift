@@ -58,5 +58,5 @@ struct PrinterActivityLiveActivity: Widget {
 ) {
     PrinterActivityLiveActivity()
 } contentStates: {
-    PrinterAttributes.ContentState.mockPrinting
+    PrinterAttributes.ContentState.mockPaused
 }
