@@ -4,22 +4,29 @@ Real-time 3D print progress on your **Samsung Galaxy lock screen** (Now Bar) and
 
 A lightweight Linux server monitors your Bambu Lab printer over MQTT and pushes live progress updates to your phone. On **Android**, it uses Firebase Cloud Messaging to display progress in Samsung's Now Bar. On **iOS**, it uses Apple's ActivityKit push notifications to display Live Activities on the lock screen and Dynamic Island — with zero battery drain on the phone.
 
+
+## Android Pics
 <img src="https://github.com/user-attachments/assets/714ecb8c-84b0-43eb-b0e8-9c4ec00fe628" width="20%"> <img src="https://github.com/user-attachments/assets/b98b7370-30fe-4da4-b973-d197064cadb5" width="20%"> <img src="https://github.com/user-attachments/assets/3e581f82-1d4a-4806-a0fd-cf53bccc10e7" width="20%">
 <img src="https://github.com/user-attachments/assets/cb9ef2a8-3f96-46de-b592-081409a4c2a5" width="45%"> <img src="https://github.com/user-attachments/assets/696f20ce-59ab-47be-8266-dae7b04bb752" width="45%">
 
+## IOS Pics
+![554168342-d8e663c5-c912-442d-a839-f7aef2bfe3b7](https://github.com/user-attachments/assets/79ff2d50-722a-4fbc-9b8d-769655b44e9a)
+![554168339-44872c56-7d6d-4625-ad2c-1f9283525624](https://github.com/user-attachments/assets/1ec3e649-9dbb-42a7-80d3-dda7defe973d)
+![554168336-6a5a85b5-31d8-4bf6-b7b6-b78fe7cd3146](https://github.com/user-attachments/assets/f2dc2f88-4d85-4e53-88ae-13f93ef158ca)
+![554168326-d581f78c-19e9-4422-b461-31bb615b524b](https://github.com/user-attachments/assets/bc5b7195-c0fd-4318-a865-71f78d8fc47a)
 
 
 ## How It Works
 
 ```
-                                       ┌──FCM Push──> Android App ──> Now Bar (Samsung lock screen)
+                                       ┌──FCM Push──> Android App ──> Live Notification
 Bambu Printer ──MQTT──> Linux Server ──┤
      (24/7)              (Python)      └──APNs Push──> iOS App ──> Live Activity (Dynamic Island / lock screen)
 ```
 
 1. **Linux server** maintains a persistent MQTT connection to Bambu Cloud
 2. When the printer state changes (progress, layer, start, finish), the server sends push notifications
-3. **Android**: FCM push → Now Bar live notification on Samsung lock screen
+3. **Android**: FCM push → Now Bar live notification on lock screen
 4. **iOS**: APNs push → Live Activity on lock screen & Dynamic Island
 5. Your phone only wakes when a notification arrives - **near-zero battery impact**
 
@@ -35,7 +42,7 @@ Bambu Printer ──MQTT──> Linux Server ──┤
 
 ## Requirements
 
-- **Android Phone**: Samsung Galaxy with One UI 8 (Android 16) for Now Bar support
+- **Android Phone**: Samsung Galaxy with One UI 8 (Android 16) for Now Bar support, other android devices get normal live notifications
   - Older Android versions get standard progress notifications instead
 - **iPhone**: Any iPhone with iOS 18+ (Dynamic Island requires iPhone 14 Pro or newer)
 - **Printer**: Any Bambu Lab printer connected to Bambu Cloud (X1C, P1S, P1P, A1, A1 Mini, etc.)
@@ -508,5 +515,6 @@ BambuNowBar/
 ## License
 
 MIT
+
 
 
