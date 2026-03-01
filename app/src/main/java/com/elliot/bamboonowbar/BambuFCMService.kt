@@ -56,8 +56,14 @@ class BambuFCMService : FirebaseMessagingService() {
         val jobName = data["job_name"] ?: ""
         val layerNum = data["layer_num"]?.toIntOrNull() ?: 0
         val totalLayers = data["total_layers"]?.toIntOrNull() ?: 0
+        val prepareStage = data["prepare_stage"] ?: ""
+        val nozzleTemp = data["nozzle_temp"]?.toIntOrNull() ?: 0
+        val nozzleTargetTemp = data["nozzle_target_temp"]?.toIntOrNull() ?: 0
+        val bedTemp = data["bed_temp"]?.toIntOrNull() ?: 0
+        val bedTargetTemp = data["bed_target_temp"]?.toIntOrNull() ?: 0
+        val chamberTemp = data["chamber_temp"]?.toIntOrNull() ?: 0
 
-        Log.d(TAG, "Type: $type, State: $gcodeState, Progress: $progress%")
+        Log.d(TAG, "Type: $type, State: $gcodeState, Progress: $progress%, Stage: $prepareStage")
 
         // Format time remaining
         val timeRemaining = formatTimeRemaining(remainingMinutes * 60)
@@ -84,7 +90,8 @@ class BambuFCMService : FirebaseMessagingService() {
                     timeRemaining = timeRemaining,
                     jobName = jobName.ifEmpty { null },
                     layerInfo = null,
-                    isStarting = true
+                    isStarting = true,
+                    prepareStage = prepareStage.ifEmpty { null }
                 )
             }
 
@@ -95,7 +102,8 @@ class BambuFCMService : FirebaseMessagingService() {
                     timeRemaining = timeRemaining,
                     jobName = jobName.ifEmpty { null },
                     layerInfo = if (totalLayers > 0 && !isStarting) "$layerNum/$totalLayers" else null,
-                    isStarting = isStarting
+                    isStarting = isStarting,
+                    prepareStage = if (isStarting) prepareStage.ifEmpty { null } else null
                 )
             }
 
@@ -105,6 +113,20 @@ class BambuFCMService : FirebaseMessagingService() {
 
             "cancelled" -> {
                 liveUpdateManager?.postCancellationNotification(jobName.ifEmpty { null })
+            }
+
+            "paused" -> {
+                liveUpdateManager?.postPausedNotification(
+                    jobName = jobName.ifEmpty { null },
+                    reason = prepareStage.ifEmpty { null }
+                )
+            }
+
+            "issue" -> {
+                liveUpdateManager?.postIssueNotification(
+                    jobName = jobName.ifEmpty { null },
+                    issue = prepareStage.ifEmpty { null }
+                )
             }
 
             "idle" -> {

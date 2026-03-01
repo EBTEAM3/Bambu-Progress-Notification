@@ -369,7 +369,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="FCM Push Mode (Most Battery Efficient):\n\n1. Grant Post Notifications permission\n2. Enable Now Bar for this app:\n   • Settings → Lock screen → Now Bar → Live notifications\n3. Copy FCM Token (button above) to your server script\n4. Run the Python server on your Linux machine\n\nHow it works:\n• Your Linux server monitors the printer 24/7\n• Server sends push notification when print starts/updates\n• Phone wakes ONLY when notification arrives\n• Zero battery drain when printer is idle!\n\nNo background service needed on phone."
+                    android:text="FCM Push Mode (Most Battery Efficient):\n\n1. Grant Post Notifications permission\n2. Enable live notifications from all apps:\n   • Settings → Developer options → Live notifications from all apps\n3. Copy FCM Token (button above) to your server script\n4. Run the Python server on your Linux machine\n\nHow it works:\n• Your Linux server monitors the printer 24/7\n• Server sends push notification when print starts/updates\n• Phone wakes ONLY when notification arrives\n• Zero battery drain when printer is idle!\n\nNo background service needed on phone."
                     android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
 
             </LinearLayout>

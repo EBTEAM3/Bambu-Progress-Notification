@@ -1,0 +1,65 @@
+name: BambuNowBar
+options:
+  bundleIdPrefix: com.elliot
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "16.0"
+
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    majorVersion: "11.0.0"
+
+targets:
+  BambuNowBar:
+    type: application
+    platform: iOS
+    sources:
+      - path: BambuNowBar
+      - path: Shared
+    settings:
+      base:
+        INFOPLIST_FILE: BambuNowBar/Info.plist
+        CODE_SIGN_ENTITLEMENTS: BambuNowBar/BambuNowBar.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.elliot.bamboonowbar
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: false
+    dependencies:
+      - target: BambuNowBarWidgets
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseFirestore
+    entitlements:
+      path: BambuNowBar/BambuNowBar.entitlements
+      properties:
+        aps-environment: development
+
+  BambuNowBarWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: BambuNowBarWidgets
+      - path: Shared
+    settings:
+      base:
+        INFOPLIST_FILE: BambuNowBarWidgets/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.elliot.bamboonowbar.widgets
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: false
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+
+schemes:
+  BambuNowBar:
+    build:
+      targets:
+        BambuNowBar: all
+        BambuNowBarWidgets: all
+  BambuNowBarWidgets:
+    build:
+      targets:
+        BambuNowBarWidgets: all
