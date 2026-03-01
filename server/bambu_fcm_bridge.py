@@ -909,6 +909,12 @@ class BambuFCMBridge:
 
     def _has_meaningful_change(self) -> bool:
         """Check if state has changed enough to warrant sending FCM"""
+        # Terminal states (completed/cancelled/idle) only need to be sent once.
+        # The printer keeps reporting temp changes as it cools down — ignore those.
+        if (self.state.gcode_state in ("FINISH", "COMPLETED", "CANCELLED", "FAILED", "IDLE")
+                and self.state.gcode_state == self.state.last_sent_state):
+            return False
+
         # APNs Live Activity not started yet — keep retrying so we pick up
         # running prints after a server restart (tokens may not be loaded yet)
         if (self.apns and self.apns.enabled and not self._apns_activity_active
