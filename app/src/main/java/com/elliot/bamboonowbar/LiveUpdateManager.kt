@@ -108,8 +108,9 @@ class LiveUpdateManager(private val context: Context) {
      * @param jobName Name of the print job
      * @param layerInfo Optional layer info string (e.g., "150/300")
      * @param isStarting True if printer is preparing (homing, leveling, heating) - shows "Starting..." instead of percentage
+     * @param prepareStage Optional preparation stage name (e.g., "Auto bed leveling", "Heating hotend")
      */
-    fun postLiveUpdate(progress: Int, timeRemaining: String, jobName: String? = null, layerInfo: String? = null, isStarting: Boolean = false) {
+    fun postLiveUpdate(progress: Int, timeRemaining: String, jobName: String? = null, layerInfo: String? = null, isStarting: Boolean = false, prepareStage: String? = null) {
         val now = System.currentTimeMillis()
         val progressDelta = kotlin.math.abs(progress - lastProgress)
 
@@ -124,9 +125,9 @@ class LiveUpdateManager(private val context: Context) {
         val isCompleted = progress >= 100
 
         val notification = if (Build.VERSION.SDK_INT >= 36) {
-            buildProgressStyleNotification(progress, timeRemaining, jobName, layerInfo, isCompleted, isStarting)
+            buildProgressStyleNotification(progress, timeRemaining, jobName, layerInfo, isCompleted, isStarting, prepareStage)
         } else {
-            buildCompatNotification(progress, timeRemaining, jobName, layerInfo, isCompleted, isStarting)
+            buildCompatNotification(progress, timeRemaining, jobName, layerInfo, isCompleted, isStarting, prepareStage)
         }
 
         notificationManager.notify(NOTIFICATION_ID, notification)
@@ -148,18 +149,23 @@ class LiveUpdateManager(private val context: Context) {
         jobName: String?,
         layerInfo: String?,
         isCompleted: Boolean,
-        isStarting: Boolean = false
+        isStarting: Boolean = false,
+        prepareStage: String? = null
     ): Notification {
         // Content for different display locations
         val title = jobName?.takeIf { it.isNotEmpty() } ?: "3D Print"
 
-        // Status bar chip: Show "Starting..." or percentage
-        val chipText = if (isStarting) "Starting..." else "$progress%"
+        // Status bar chip: Show stage name (truncated), "Starting...", or percentage
+        val chipText = if (isStarting) {
+            prepareStage ?: "Starting..."
+        } else {
+            "$progress%"
+        }
 
-        // Now Bar / Lock screen: Show "Starting..." or percentage with time
+        // Now Bar / Lock screen: Show stage name, "Starting...", or percentage with time
         val nowBarPrimary = title
         val nowBarSecondary = if (isStarting) {
-            "Starting..."
+            prepareStage ?: "Starting..."
         } else {
             "$progress%    $timeRemaining"
         }
@@ -167,7 +173,7 @@ class LiveUpdateManager(private val context: Context) {
         // Notification panel: Full info
         val panelText = buildString {
             if (isStarting) {
-                append("Starting... Preparing printer")
+                append(prepareStage ?: "Starting...")
             } else {
                 append("$progress%")
                 if (timeRemaining.isNotEmpty() && !isCompleted) {
@@ -232,7 +238,7 @@ class LiveUpdateManager(private val context: Context) {
         val etaMillis = parseTimeRemainingToMillis(timeRemaining)
 
         // Build Samsung/Android extras
-        val extras = buildExtrasBundle(progress, timeRemaining, title, chipText, nowBarPrimary, nowBarSecondary, isCompleted, isStarting)
+        val extras = buildExtrasBundle(progress, timeRemaining, title, chipText, nowBarPrimary, nowBarSecondary, isCompleted, isStarting, prepareStage)
 
         // Large icon for notification (higher res vehicle/printer image)
         val largeIcon = Icon.createWithResource(context, R.drawable.printer_3d_nozzle)
@@ -267,13 +273,14 @@ class LiveUpdateManager(private val context: Context) {
         jobName: String?,
         layerInfo: String?,
         isCompleted: Boolean,
-        isStarting: Boolean = false
+        isStarting: Boolean = false,
+        prepareStage: String? = null
     ): Notification {
         val title = jobName?.takeIf { it.isNotEmpty() } ?: "3D Print Progress"
 
         val contentText = buildString {
             if (isStarting) {
-                append("Starting... Preparing printer")
+                append(prepareStage ?: "Starting... Preparing printer")
             } else {
                 append("$progress%")
                 if (timeRemaining.isNotEmpty() && !isCompleted) {
@@ -285,12 +292,12 @@ class LiveUpdateManager(private val context: Context) {
 
         val etaMillis = parseTimeRemainingToMillis(timeRemaining)
 
-        val chipText = if (isStarting) "Starting..." else "$progress%"
+        val chipText = if (isStarting) (prepareStage ?: "Starting...") else "$progress%"
         val nowBarPrimary = title
-        val nowBarSecondary = if (isStarting) "Starting..." else "$progress%    $timeRemaining"
+        val nowBarSecondary = if (isStarting) (prepareStage ?: "Starting...") else "$progress%    $timeRemaining"
         val displayProgress = if (isStarting) 5 else progress  // Show small progress when starting
 
-        val extras = buildExtrasBundle(displayProgress, timeRemaining, title, chipText, nowBarPrimary, nowBarSecondary, isCompleted)
+        val extras = buildExtrasBundle(displayProgress, timeRemaining, title, chipText, nowBarPrimary, nowBarSecondary, isCompleted, isStarting, prepareStage)
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_printer)
@@ -323,7 +330,8 @@ class LiveUpdateManager(private val context: Context) {
         nowBarPrimary: String,
         nowBarSecondary: String,
         isCompleted: Boolean,
-        isStarting: Boolean = false
+        isStarting: Boolean = false,
+        prepareStage: String? = null
     ): Bundle {
         return Bundle().apply {
             // Android 16 Live Update promotion
@@ -334,7 +342,7 @@ class LiveUpdateManager(private val context: Context) {
 
             // Primary and secondary info for notification
             putString(SAMSUNG_PRIMARY_INFO, title)
-            val secondaryInfo = if (isStarting) "Starting... Preparing printer" else "$progress% • $timeRemaining"
+            val secondaryInfo = if (isStarting) (prepareStage ?: "Starting... Preparing printer") else "$progress% • $timeRemaining"
             putString(SAMSUNG_SECONDARY_INFO, secondaryInfo)
 
             // Status bar chip configuration - just shows percentage
@@ -423,6 +431,40 @@ class LiveUpdateManager(private val context: Context) {
 
         notificationManager.notify(NOTIFICATION_ID, notification)
         Log.d(TAG, "Posted cancellation notification - stays until user dismisses")
+    }
+
+    /**
+     * Posts a paused notification that stays until user swipes it away.
+     */
+    fun postPausedNotification(jobName: String? = null, reason: String? = null) {
+        val title = jobName?.takeIf { it.isNotEmpty() } ?: "3D Print"
+        val statusText = if (reason != null) "Paused: $reason" else "Print Paused"
+
+        val notification = if (Build.VERSION.SDK_INT >= 36) {
+            buildFinalNotificationApi36(title, statusText, isCompleted = false)
+        } else {
+            buildFinalNotificationCompat(title, statusText, isCompleted = false)
+        }
+
+        notificationManager.notify(NOTIFICATION_ID, notification)
+        Log.d(TAG, "Posted paused notification: $statusText")
+    }
+
+    /**
+     * Posts an issue notification that stays until user swipes it away.
+     */
+    fun postIssueNotification(jobName: String? = null, issue: String? = null) {
+        val title = jobName?.takeIf { it.isNotEmpty() } ?: "3D Print"
+        val statusText = if (issue != null) "Issue: $issue" else "Printer Issue"
+
+        val notification = if (Build.VERSION.SDK_INT >= 36) {
+            buildFinalNotificationApi36(title, statusText, isCompleted = false)
+        } else {
+            buildFinalNotificationCompat(title, statusText, isCompleted = false)
+        }
+
+        notificationManager.notify(NOTIFICATION_ID, notification)
+        Log.d(TAG, "Posted issue notification: $statusText")
     }
 
     /**

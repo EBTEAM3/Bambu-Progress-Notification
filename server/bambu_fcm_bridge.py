@@ -392,7 +392,8 @@ class BambuFCMBridge:
         self._apns_ending = False
         self._init_firebase()
         self._init_apns()
-        self.token_listener.start()
+        if self.apns and self.apns.enabled:
+            self.token_listener.start()
 
     def _init_firebase(self):
         """Initialize Firebase Admin SDK"""
