@@ -29,6 +29,7 @@ server/config.py
 server/firebase-service-account.json
 server/AuthKey_*.p8
 server/*.log
+server/*.db
 
 # Python
 __pycache__/

@@ -458,6 +458,22 @@ FCM_DEVICE_TOKENS = [
 
 ---
 
+## FilamentTracker Integration (Optional)
+
+If you also want filament tracking, clone the [FilamentTracker](https://github.com/YOUR_USERNAME/FilamentTracker) repo as a sibling folder:
+
+```
+YourFolder/
+  BambuNowBar/         ← this repo
+  FilamentTracker/     ← clone here
+```
+
+Then set `ENABLE_FILAMENT_TRACKER = True` in your `config.py`. Both services will share a single MQTT connection.
+
+See the [FilamentTracker README](https://github.com/YOUR_USERNAME/FilamentTracker) for more details.
+
+---
+
 ## Project Structure
 
 ```
@@ -482,7 +498,8 @@ BambuNowBar/
 │       ├── PrinterActivityLiveActivity.swift  # All Live Activity views
 │       └── BambuNowBarWidgetsBundle.swift
 ├── server/                           # Linux server
-│   ├── bambu_fcm_bridge.py           # Main server script (FCM + APNs)
+│   ├── bambu_mqtt.py                 # Shared MQTT module (printer state + callbacks)
+│   ├── bambu_fcm_bridge.py           # Notification service (FCM + APNs)
 │   ├── get_credentials.py            # Bambu credential helper
 │   ├── config.example.py             # Configuration template
 │   ├── config.py                     # Your config (NOT in repo)

@@ -4,32 +4,54 @@
 # Copy this file to config.py and fill in your values:
 #   cp config.example.py config.py
 #
-# See the README for detailed instructions on finding each value.
+# This config file is compatible with both BambuNowBar and FilamentTracker.
+# You can copy config.py between the two projects — each will use what it
+# needs and ignore settings for the other.
 
-# Bambu Cloud MQTT Configuration
+# =============================================================================
+# Bambu Cloud MQTT Configuration (required)
+# =============================================================================
 # Server: "us.mqtt.bambulab.com" for most users, "cn.mqtt.bambulab.com" for China
 BAMBU_MQTT_SERVER = "us.mqtt.bambulab.com"
 BAMBU_MQTT_PORT = 8883
 
 # Your Bambu Lab account user ID (numeric)
-# How to find: See README section "Finding Your Bambu Credentials"
+# How to find: Run python3 get_credentials.py
 BAMBU_USER_ID = "YOUR_USER_ID_HERE"
 
 # Your Bambu Lab access token
-# How to find: See README section "Finding Your Bambu Credentials"
 BAMBU_ACCESS_TOKEN = "YOUR_ACCESS_TOKEN_HERE"
 
 # Your printer's serial number
-# How to find: Bambu Handy app -> Printer settings, or printed on the printer itself
+# How to find: Bambu Handy app -> Printer settings, or printed on the printer
 BAMBU_PRINTER_SERIAL = "YOUR_PRINTER_SERIAL_HERE"
 
+# =============================================================================
+# Filament Tracker Settings
+# =============================================================================
+# These are used by the FilamentTracker service.
+# If running BambuNowBar only, you can leave these as defaults.
+
+FILAMENT_TRACKER_PORT = 5000
+FILAMENT_TRACKER_HOST = "0.0.0.0"  # Listen on all interfaces
+
+# Alert when a spool drops below this weight (grams). Set to 0 to disable.
+FILAMENT_LOW_ALERT_GRAMS = 150
+
+# Send FCM push notification when filament is low (requires notifications)
+FILAMENT_LOW_ALERT_FCM = False
+
+# =============================================================================
+# Notification Service Settings (FCM / Firebase)
+# =============================================================================
+# These are used by the BambuNowBar notification service.
+# If running FilamentTracker only, you can leave these as defaults.
+
 # Path to your Firebase service account JSON file
-# How to get: See README section "Firebase Setup"
 FIREBASE_CREDENTIALS_FILE = "firebase-service-account.json"
 
 # Your Android device's FCM token(s)
 # How to get: Open the BambuNowBar Android app -> tap "Copy FCM Token"
-# You can add multiple device tokens for multi-device support
 FCM_DEVICE_TOKENS = [
     "YOUR_FCM_TOKEN_HERE",
 ]
@@ -38,26 +60,26 @@ FCM_DEVICE_TOKENS = [
 # iOS Live Activity (APNs) Configuration — OPTIONAL
 # =============================================================================
 # Leave these empty if you don't have an iOS device.
-# iOS tokens are synced automatically via Firebase Firestore.
-# See README section "Apple Developer Setup" for instructions.
 
-# Path to your Apple Push Notification .p8 key file
-# How to get: developer.apple.com -> Keys -> Create key with APNs enabled
-APNS_KEY_FILE = ""  # e.g., "AuthKey_XXXXXXXXXX.p8"
-
-# Your Apple Developer Team ID (10-character string)
-# How to find: developer.apple.com -> Account -> Membership -> Team ID
-APNS_TEAM_ID = ""  # e.g., "ABCDE12345"
-
-# The Key ID for your .p8 key (10-character string)
-# Shown when you create the key in Apple Developer portal
-APNS_KEY_ID = ""  # e.g., "XXXXXXXXXX"
-
-# Your iOS app's bundle ID (default matches the Xcode project)
+APNS_KEY_FILE = ""          # e.g., "AuthKey_XXXXXXXXXX.p8"
+APNS_TEAM_ID = ""           # e.g., "ABCDE12345"
+APNS_KEY_ID = ""            # e.g., "XXXXXXXXXX"
 APNS_BUNDLE_ID = "com.elliot.bamboonowbar"
-
-# Use sandbox (True) for development builds, production (False) for TestFlight/App Store
 APNS_USE_SANDBOX = True
-
-# Printer name displayed in the iOS Live Activity
 APNS_PRINTER_NAME = "Bambu Lab"
+
+# =============================================================================
+# Cross-Service Integration — OPTIONAL
+# =============================================================================
+# If you have both BambuNowBar and FilamentTracker cloned as sibling folders:
+#   YourFolder/
+#     BambuNowBar/
+#     FilamentTracker/
+#
+# You can enable the other service here to run both on a single MQTT connection.
+
+# Set True in BambuNowBar to also run the filament tracker
+ENABLE_FILAMENT_TRACKER = False
+
+# Set True in FilamentTracker to also run the notification service
+ENABLE_NOTIFICATIONS = False
