@@ -468,7 +468,7 @@ FCM_DEVICE_TOKENS = [
 
 ## FilamentTracker Integration (Optional)
 
-If you also want filament tracking, clone the [FilamentTracker](https://github.com/YOUR_USERNAME/FilamentTracker) repo as a sibling folder:
+If you also want filament tracking, clone the [FilamentTracker](https://github.com/EBTEAM3/Bambu-Filament-Tracker) repo as a sibling folder:
 
 ```
 YourFolder/
@@ -478,7 +478,7 @@ YourFolder/
 
 Then set `ENABLE_FILAMENT_TRACKER = True` in your `config.py`. Both services will share a single MQTT connection.
 
-See the [FilamentTracker README](https://github.com/YOUR_USERNAME/FilamentTracker) for more details.
+See the [FilamentTracker README](https://github.com/EBTEAM3/Bambu-Filament-Tracker) for more details.
 
 ---
 
@@ -533,6 +533,7 @@ BambuNowBar/
 ## License
 
 MIT
+
 
 
 
