@@ -4,7 +4,7 @@
 # Copy this file to config.py and fill in your values:
 #   cp config.example.py config.py
 #
-# This config file is compatible with both BambuNowBar and FilamentTracker.
+# This config file is compatible with both Bambu Progress Notification and FilamentTracker.
 # You can copy config.py between the two projects — each will use what it
 # needs and ignore settings for the other.
 
@@ -30,10 +30,15 @@ BAMBU_PRINTER_SERIAL = "YOUR_PRINTER_SERIAL_HERE"
 # Filament Tracker Settings
 # =============================================================================
 # These are used by the FilamentTracker service.
-# If running BambuNowBar only, you can leave these as defaults.
+# If running Bambu Progress Notification only, you can leave these as defaults.
 
 FILAMENT_TRACKER_PORT = 5000
 FILAMENT_TRACKER_HOST = "0.0.0.0"  # Listen on all interfaces
+
+# Optional API key to protect write endpoints (PATCH/DELETE/POST).
+# Leave empty to allow unrestricted access (original behavior).
+# Can also be set via FILAMENT_TRACKER_API_KEY environment variable.
+FILAMENT_TRACKER_API_KEY = ""
 
 # Alert when a spool drops below this weight (grams). Set to 0 to disable.
 FILAMENT_LOW_ALERT_GRAMS = 150
@@ -44,14 +49,14 @@ FILAMENT_LOW_ALERT_FCM = False
 # =============================================================================
 # Notification Service Settings (FCM / Firebase)
 # =============================================================================
-# These are used by the BambuNowBar notification service.
+# These are used by the Bambu Progress Notification service.
 # If running FilamentTracker only, you can leave these as defaults.
 
 # Path to your Firebase service account JSON file
 FIREBASE_CREDENTIALS_FILE = "firebase-service-account.json"
 
 # Your Android device's FCM token(s)
-# How to get: Open the BambuNowBar Android app -> tap "Copy FCM Token"
+# How to get: Open the Bambu Progress Notification Android app -> tap "Copy FCM Token"
 FCM_DEVICE_TOKENS = [
     "YOUR_FCM_TOKEN_HERE",
 ]
@@ -71,14 +76,14 @@ APNS_PRINTER_NAME = "Bambu Lab"
 # =============================================================================
 # Cross-Service Integration — OPTIONAL
 # =============================================================================
-# If you have both BambuNowBar and FilamentTracker cloned as sibling folders:
+# If you have both Bambu Progress Notification and FilamentTracker cloned as sibling folders:
 #   YourFolder/
-#     BambuNowBar/
+#     Bambu-Progress-Notification/
 #     FilamentTracker/
 #
 # You can enable the other service here to run both on a single MQTT connection.
 
-# Set True in BambuNowBar to also run the filament tracker
+# Set True in Bambu Progress Notification to also run the filament tracker
 ENABLE_FILAMENT_TRACKER = False
 
 # Set True in FilamentTracker to also run the notification service

@@ -37,7 +37,7 @@ Firebase Cloud Messaging (FCM) push notifications to your Android app.
 
 7. Place this file in your Android project:
    ```
-   BambuNowBar/app/google-services.json
+   Bambu-Progress-Notification/app/google-services.json
    ```
 
 8. Click **Next** through the remaining steps

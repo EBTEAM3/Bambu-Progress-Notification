@@ -4,7 +4,7 @@ Bambu MQTT Client - Modular MQTT connection for Bambu Lab printers.
 
 Provides a reusable MQTT client that connects to Bambu Cloud, tracks printer
 state, and fires callbacks when data arrives. Used as a shared dependency by
-both the BambuNowBar notification server and the Filament Tracker.
+both the Bambu Progress Notification server and the Filament Tracker.
 
 Usage:
     from bambu_mqtt import BambuMQTTClient, PrinterState, PREPARATION_STAGES
