@@ -229,8 +229,8 @@ Firestore is used to automatically sync iOS push tokens between the iOS app and 
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/BambuNowBar.git
-cd BambuNowBar/server
+git clone https://github.com/EBTEAM3/Bambu-Progress-Notification.git
+cd Bambu-Progress-Notification/server
 
 # Install Python dependencies
 pip3 install -r requirements.txt
